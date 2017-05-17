@@ -30,4 +30,6 @@ leer_datos_spam = function(){
 
 spam = leer_datos_spam()
 spam$etiquetas[spam$etiquetas == 0] = -1
-train_indexes = sample(nrow(spam$datos))
+train_indexes = sample(nrow(spam$datos),round(nrow(spam$datos)*0.7))
+spam.train = spam$datos[train_indexes,]
+spam.test = spam$datos[-train_indexes,]
