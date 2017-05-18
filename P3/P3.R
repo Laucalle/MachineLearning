@@ -53,8 +53,9 @@ spam_procesado = preprocesar_datos(spam$datos,c("YeoJohnson","center","scale","p
 indices_train = which(spam$conjuntos == 0)
 # Añadir las etiquetas para la regresión lineal
 spam_procesado = cbind(spam_procesado,spam$etiquetas)
+colnames(spam_procesado)[ncol(spam_procesado)] = "etiquetas"
 # Hacer regresión lineal de las etiquetas según las otras características
-reg_lin_spam = lm(spam_procesado$`spam$etiquetas`~.,data=spam_procesado,subset=indices_train)
+reg_lin_spam = lm(etiquetas~.,data=spam_procesado,subset=indices_train)
 # Obtener predicciones de la regresión sobre los datos de test
 prediccion_test = evaluar_regresion(reg_lin_spam,spam_procesado[-indices_train,-ncol(spam_procesado)])
 # Error cuadrático de clasificación (tomando el signo de las predicciones de la regresión)
@@ -63,4 +64,14 @@ error_cuadratico = data_error(sign(prediccion_test),spam_procesado[-indices_trai
 porc_error = error_cuadratico*100/4
 
 # Buscamos exhaustivamente conjuntos de características que usar
-subsets_spam = regsubsets(spam_procesado$`spam$etiquetas`~.,data=spam_procesado[indices_train,],method="exhaustive",nvmax=15)
+subsets_spam = regsubsets(etiquetas~.,data=spam_procesado[indices_train,],method="exhaustive",nvmax=15)
+# Obtenemos la matriz de características seleccionadas por grupos de tamaño desde 1 hasta nvmax
+matriz_subconjuntos = summary(subsets_spam)$which[,-1]
+# Guardamos, para cada fila, las columnas cuyas variables han sido seleccionadas.
+seleccionados = apply(matriz_subconjuntos,1,which)
+# Obtenemos los nombres de esas columnas (para utilizarlos en la regresión)
+seleccionados = lapply(seleccionados,names)
+# Construimos la suma de las variables que usaremos en la regresión lineal
+seleccionados = mapply(paste,seleccionados,MoreArgs=list(collapse="+"))
+# Construimos strings equivalentes a las fórmulas que usaremos en la regresión lineal
+formulas = mapply(paste,rep("etiquetas~",15),seleccionados,USE.NAMES = FALSE)
