@@ -23,9 +23,10 @@ data_error = function(clasificados,reales){
 leer_datos_spam = function(){
     
     datos = read.table("./datos/spam.data")
+    conjuntos = read.table("./datos/spam.traintest")
     etiquetas = datos[,ncol(datos)]
     etiquetas[etiquetas == 0] = -1
-    list(datos=datos[,-ncol(datos)],etiquetas=etiquetas)
+    list(datos=datos[,-ncol(datos)],etiquetas=etiquetas,conjuntos=conjuntos)
     
 }
 
@@ -49,7 +50,7 @@ evaluar_regresion = function(regresion,datos){
 # Preprocesar los datos 
 spam_procesado = preprocesar_datos(spam$datos,c("YeoJohnson","center","scale","pca"),0.8)
 # Obtener el conjunto de entrenamiento
-indices_train = sample(nrow(spam_procesado),round(nrow(spam_procesado)*0.7))
+indices_train = which(spam$conjuntos == 0)
 # Añadir las etiquetas para la regresión lineal
 spam_procesado = cbind(spam_procesado,spam$etiquetas)
 # Hacer regresión lineal de las etiquetas según las otras características
@@ -60,3 +61,6 @@ prediccion_test = evaluar_regresion(reg_lin_spam,spam_procesado[-indices_train,-
 error_cuadratico = data_error(sign(prediccion_test),spam_procesado[-indices_train,ncol(spam_procesado)])
 # Porcentaje de error en el conjunto de test
 porc_error = error_cuadratico*100/4
+
+# Buscamos exhaustivamente conjuntos de características que usar
+subsets_spam = regsubsets(spam_procesado$`spam$etiquetas`~.,data=spam_procesado[indices_train,],method="exhaustive",nvmax=15)
