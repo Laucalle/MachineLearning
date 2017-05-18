@@ -23,13 +23,40 @@ data_error = function(clasificados,reales){
 leer_datos_spam = function(){
     
     datos = read.table("./datos/spam.data")
-    etiquetas = datos[,length(datos)]
-    list(datos=datos[,-length(datos)],etiquetas=etiquetas)
+    etiquetas = datos[,ncol(datos)]
+    etiquetas[etiquetas == 0] = -1
+    list(datos=datos[,-ncol(datos)],etiquetas=etiquetas)
     
 }
 
 spam = leer_datos_spam()
-spam$etiquetas[spam$etiquetas == 0] = -1
-train_indexes = sample(nrow(spam$datos),round(nrow(spam$datos)*0.7))
-spam.train = spam$datos[train_indexes,]
-spam.test = spam$datos[-train_indexes,]
+
+# Preprocesamiento (centrado, escalado, análisis de componentes principales...)
+preprocesar_datos = function(datos,metodos,umbral_varianza){
+    
+    preprocess_obj = preProcess(datos,method=metodos,umbral_varianza)
+    nuevosDatos = predict(preprocess_obj,datos)
+    
+}
+
+# Evalúa la regresión para unos datos
+evaluar_regresion = function(regresion,datos){
+    
+    predict(regresion,datos) # Los datos no deben incluir las etiquetas
+    
+}
+
+# Preprocesar los datos 
+spam_procesado = preprocesar_datos(spam$datos,c("YeoJohnson","center","scale","pca"),0.8)
+# Obtener el conjunto de entrenamiento
+indices_train = sample(nrow(spam_procesado),round(nrow(spam_procesado)*0.7))
+# Añadir las etiquetas para la regresión lineal
+spam_procesado = cbind(spam_procesado,spam$etiquetas)
+# Hacer regresión lineal de las etiquetas según las otras características
+reg_lin_spam = lm(spam_procesado$`spam$etiquetas`~.,data=spam_procesado,subset=indices_train)
+# Obtener predicciones de la regresión sobre los datos de test
+prediccion_test = evaluar_regresion(reg_lin_spam,spam_procesado[-indices_train,-ncol(spam_procesado)])
+# Error cuadrático de clasificación (tomando el signo de las predicciones de la regresión)
+error_cuadratico = data_error(sign(prediccion_test),spam_procesado[-indices_train,ncol(spam_procesado)])
+# Porcentaje de error en el conjunto de test
+porc_error = error_cuadratico*100/4
