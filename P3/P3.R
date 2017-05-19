@@ -30,8 +30,6 @@ leer_datos_spam = function(){
     
 }
 
-spam = leer_datos_spam()
-
 # Preprocesamiento (centrado, escalado, análisis de componentes principales...)
 preprocesar_datos = function(datos,metodos,umbral_varianza){
     
@@ -47,6 +45,16 @@ evaluar_regresion = function(regresion,datos){
     
 }
 
+# Evalúa una regresión lineal dada una fórmula y unos datos de entrenamiento 
+evalua_lm = function(formula,datos,subconjunto){
+  reg_lin = do.call("lm", list(formula=formula, data=substitute(datos), subset=substitute(subconjunto)))
+  prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
+  error_cuadratico = data_error(sign(prediccion_test),datos[-subconjunto,ncol(datos)])
+  porc_error = error_cuadratico*100/4  
+  list(formula=formula, error = porc_error)
+}
+
+spam = leer_datos_spam()
 # Preprocesar los datos 
 spam_procesado = preprocesar_datos(spam$datos,c("YeoJohnson","center","scale","pca"),0.8)
 # Obtener el conjunto de entrenamiento
@@ -64,7 +72,7 @@ error_cuadratico = data_error(sign(prediccion_test),spam_procesado[-indices_trai
 porc_error = error_cuadratico*100/4
 
 # Buscamos exhaustivamente conjuntos de características que usar
-subsets_spam = regsubsets(etiquetas~.,data=spam_procesado[indices_train,],method="exhaustive",nvmax=15)
+subsets_spam = regsubsets(etiquetas~.,data=spam_procesado[indices_train,],method="exhaustive",nvmax=30)
 # Obtenemos la matriz de características seleccionadas por grupos de tamaño desde 1 hasta nvmax
 matriz_subconjuntos = summary(subsets_spam)$which[,-1]
 # Guardamos, para cada fila, las columnas cuyas variables han sido seleccionadas.
@@ -74,4 +82,17 @@ seleccionados = lapply(seleccionados,names)
 # Construimos la suma de las variables que usaremos en la regresión lineal
 seleccionados = mapply(paste,seleccionados,MoreArgs=list(collapse="+"))
 # Construimos strings equivalentes a las fórmulas que usaremos en la regresión lineal
-formulas = mapply(paste,rep("etiquetas~",15),seleccionados,USE.NAMES = FALSE)
+formulas = mapply(paste,rep("etiquetas~",30),seleccionados,USE.NAMES = FALSE)
+
+# Construimos objetos fórmula
+formulas = apply(matrix(formulas,nrow=length(formulas)), 1, as.formula)
+
+
+evalua_lm = function(formula,datos,subconjunto){
+  reg_lin = do.call("lm", list(formula=formula, data=substitute(datos), subset=substitute(subconjunto)))
+  prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
+  error_cuadratico = data_error(sign(prediccion_test),datos[-subconjunto,ncol(datos)])
+  porc_error = error_cuadratico*100/4  
+  list(formula=formula, error = porc_error)
+}
+ajustes = mapply(evalua_lm, formulas, MoreArgs = list(datos = spam_procesado, subconjunto = indices_train))
