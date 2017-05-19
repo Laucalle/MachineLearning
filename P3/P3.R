@@ -84,7 +84,7 @@ evalua_glm = function(formula,datos,subconjunto){
 
 spam = leer_datos_spam()
 # Preprocesar los datos 
-spam_procesado = preprocesar_datos(spam$datos,c("YeoJohnson","center","scale","pca"),0.8)
+spam_procesado = preprocesar_datos(spam$datos,c("YeoJohnson","center","scale","pca"),0.85)
 # Obtener el conjunto de entrenamiento
 indices_train = which(spam$conjuntos == 0)
 # Añadir las etiquetas para la regresión lineal
@@ -112,4 +112,5 @@ formulas = mapply(paste,rep("etiquetas~",max_caracteristicas),seleccionados,USE.
 # Construimos objetos fórmula
 formulas = apply(matrix(formulas,nrow=length(formulas)), 1, as.formula)
 # Obtenemos los resultados de evaluar todos los modelos
-ajustes = mapply(evalua_lm, formulas, MoreArgs = list(datos = spam_procesado, subconjunto = indices_train))
+ajustes_lm = mapply(evalua_lm, formulas, MoreArgs = list(datos = spam_procesado, subconjunto = indices_train))
+ajustes_glm = mapply(evalua_glm, formulas, MoreArgs = list(datos = spam_procesado, subconjunto = indices_train))
