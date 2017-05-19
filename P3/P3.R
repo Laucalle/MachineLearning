@@ -6,16 +6,39 @@ clasificar_recta = function(punto, recta){
     
 }
 
-data_error = function(clasificados,reales){
+error_cuadratico = function(clasificados,reales){
     
     squared_error = function(pair_h_y){ # (h(x) - y_n)^2
         (pair_h_y[1]-pair_h_y[2])^2
+    }
+    
+    if(min(reales) == 0){
+        
+        reales[reales == 0] = -1
+        clasificados[clasificados < 0.5] = -1
+        clasificados[clasificados >= 0.5] = 1
+        
     }
     
     pos_errores = which(clasificados != reales) # Qué etiquetas ha clasificado mal.
     pares_errores = cbind(clasificados[pos_errores],reales[pos_errores],deparse.level=0)
     # Sumamos los errores al cuadrado y hacemos la media.
     sum(apply(pares_errores,1,squared_error))/length(clasificados)
+}
+
+porcentaje_error = function(clasificados,reales,umbral=0.5){
+    
+    if(min(reales) == 0){
+        
+        reales[reales == 0] = -1
+        clasificados[clasificados < umbral] = -1
+        clasificados[clasificados >= umbral] = 1
+        
+    }
+    
+    t = table(clasificados,reales)
+    100*(1-sum(diag(t))/sum(t))
+    
 }
 
 # Clasificación: Email Spam
@@ -25,7 +48,6 @@ leer_datos_spam = function(){
     datos = read.table("./datos/spam.data")
     conjuntos = read.table("./datos/spam.traintest")
     etiquetas = datos[,ncol(datos)]
-    etiquetas[etiquetas == 0] = -1
     list(datos=datos[,-ncol(datos)],etiquetas=etiquetas,conjuntos=conjuntos)
     
 }
@@ -47,11 +69,17 @@ evaluar_regresion = function(regresion,datos){
 
 # Evalúa una regresión lineal dada una fórmula y unos datos de entrenamiento 
 evalua_lm = function(formula,datos,subconjunto){
-  reg_lin = do.call("lm", list(formula=formula, data=substitute(datos), subset=substitute(subconjunto)))
-  prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
-  error_cuadratico = data_error(sign(prediccion_test),datos[-subconjunto,ncol(datos)])
-  porc_error = error_cuadratico*100/4  
-  list(formula=formula, error = porc_error)
+    reg_lin = do.call("lm", list(formula=formula, data=substitute(datos), subset=substitute(subconjunto)))
+    prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
+    porc_error = porcentaje_error(prediccion_test,datos[-subconjunto,ncol(datos)])
+    list(formula=formula, error = porc_error)
+}
+
+evalua_glm = function(formula,datos,subconjunto){
+    reg_lin = do.call("glm", list(formula=formula, data=substitute(datos), subset=substitute(subconjunto),family=binomial()))
+    prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
+    porc_error = porcentaje_error(prediccion_test,datos[-subconjunto,ncol(datos)])
+    list(formula=formula, error = porc_error)
 }
 
 spam = leer_datos_spam()
@@ -66,13 +94,11 @@ colnames(spam_procesado)[ncol(spam_procesado)] = "etiquetas"
 reg_lin_spam = lm(etiquetas~.,data=spam_procesado,subset=indices_train)
 # Obtener predicciones de la regresión sobre los datos de test
 prediccion_test = evaluar_regresion(reg_lin_spam,spam_procesado[-indices_train,-ncol(spam_procesado)])
-# Error cuadrático de clasificación (tomando el signo de las predicciones de la regresión)
-error_cuadratico = data_error(sign(prediccion_test),spam_procesado[-indices_train,ncol(spam_procesado)])
 # Porcentaje de error en el conjunto de test
-porc_error = error_cuadratico*100/4
-
+porc_error = porcentaje_error(prediccion_test,spam_procesado[-indices_train,ncol(spam_procesado)])
 # Buscamos exhaustivamente conjuntos de características que usar
-subsets_spam = regsubsets(etiquetas~.,data=spam_procesado[indices_train,],method="exhaustive",nvmax=30)
+max_caracteristicas = ncol(spam_procesado)-1
+subsets_spam = regsubsets(etiquetas~.,data=spam_procesado[indices_train,],method="exhaustive",nvmax=max_caracteristicas)
 # Obtenemos la matriz de características seleccionadas por grupos de tamaño desde 1 hasta nvmax
 matriz_subconjuntos = summary(subsets_spam)$which[,-1]
 # Guardamos, para cada fila, las columnas cuyas variables han sido seleccionadas.
@@ -82,17 +108,8 @@ seleccionados = lapply(seleccionados,names)
 # Construimos la suma de las variables que usaremos en la regresión lineal
 seleccionados = mapply(paste,seleccionados,MoreArgs=list(collapse="+"))
 # Construimos strings equivalentes a las fórmulas que usaremos en la regresión lineal
-formulas = mapply(paste,rep("etiquetas~",30),seleccionados,USE.NAMES = FALSE)
-
+formulas = mapply(paste,rep("etiquetas~",max_caracteristicas),seleccionados,USE.NAMES = FALSE)
 # Construimos objetos fórmula
 formulas = apply(matrix(formulas,nrow=length(formulas)), 1, as.formula)
-
-
-evalua_lm = function(formula,datos,subconjunto){
-  reg_lin = do.call("lm", list(formula=formula, data=substitute(datos), subset=substitute(subconjunto)))
-  prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
-  error_cuadratico = data_error(sign(prediccion_test),datos[-subconjunto,ncol(datos)])
-  porc_error = error_cuadratico*100/4  
-  list(formula=formula, error = porc_error)
-}
+# Obtenemos los resultados de evaluar todos los modelos
 ajustes = mapply(evalua_lm, formulas, MoreArgs = list(datos = spam_procesado, subconjunto = indices_train))
