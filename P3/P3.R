@@ -26,7 +26,7 @@ error_cuadratico = function(clasificados,reales){
     sum(apply(pares_errores,1,squared_error))/length(clasificados)
 }
 
-porcentaje_error = function(clasificados,reales,umbral=0.5){
+porcentaje_error = function(clasificados,reales,umbral=0.5,fp=1,fn=1){
     
     if(min(reales) == 0){
         
@@ -37,11 +37,12 @@ porcentaje_error = function(clasificados,reales,umbral=0.5){
     }
     
     t = table(clasificados,reales)
-    100*(1-sum(diag(t))/sum(t))
+    total_predicciones = sum(t)
+    t[1,2] = t[1,2]*fn
+    t[2,1] = t[2,1]*fp
+    100*(1-sum(diag(t))/total_predicciones)
     
 }
-
-# Clasificación: Email Spam
 
 leer_datos_spam = function(){
     
@@ -68,19 +69,25 @@ evaluar_regresion = function(regresion,datos){
 }
 
 # Evalúa una regresión lineal dada una fórmula y unos datos de entrenamiento 
-evalua_lm = function(formula,datos,subconjunto){
+evalua_lm = function(formula,datos,subconjunto,fp=1,fn=1){
     reg_lin = do.call("lm", list(formula=formula, data=substitute(datos), subset=substitute(subconjunto)))
     prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
-    porc_error = porcentaje_error(prediccion_test,datos[-subconjunto,ncol(datos)])
+    porc_error = porcentaje_error(prediccion_test,datos[-subconjunto,ncol(datos)],fp,fn)
     list(formula=formula, error = porc_error)
 }
 
-evalua_glm = function(formula,datos,subconjunto){
-    reg_lin = do.call("glm", list(formula=formula, data=substitute(datos), subset=substitute(subconjunto),family=binomial()))
+# Evalúa una regresión lineal dada una fórmula, una familia y unos datos de entrenamiento 
+evalua_glm = function(formula,datos,subconjunto,fp=1,fn=1,familia=binomial()){
+    reg_lin = do.call("glm", list(formula=formula, data=substitute(datos), subset=substitute(subconjunto),familia))
     prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
-    porc_error = porcentaje_error(prediccion_test,datos[-subconjunto,ncol(datos)])
+    porc_error = porcentaje_error(prediccion_test,datos[-subconjunto,ncol(datos)],fp,fn)
     list(formula=formula, error = porc_error)
 }
+
+# Calcula una cota para E_out en función del error E_test
+calcular_cota_eout = function(N,delta) sqrt((log(delta/2))/(-2*N))
+
+# Clasificación: Email Spam
 
 spam = leer_datos_spam()
 # Preprocesar los datos 
@@ -95,7 +102,7 @@ reg_lin_spam = lm(etiquetas~.,data=spam_procesado,subset=indices_train)
 # Obtener predicciones de la regresión sobre los datos de test
 prediccion_test = evaluar_regresion(reg_lin_spam,spam_procesado[-indices_train,-ncol(spam_procesado)])
 # Porcentaje de error en el conjunto de test
-porc_error = porcentaje_error(prediccion_test,spam_procesado[-indices_train,ncol(spam_procesado)])
+porc_error = porcentaje_error(prediccion_test,spam_procesado[-indices_train,ncol(spam_procesado)],fp=1)
 # Buscamos exhaustivamente conjuntos de características que usar
 max_caracteristicas = ncol(spam_procesado)-1
 subsets_spam = regsubsets(etiquetas~.,data=spam_procesado[indices_train,],method="exhaustive",nvmax=max_caracteristicas)
@@ -115,15 +122,30 @@ formulas = apply(matrix(formulas,nrow=length(formulas)), 1, as.formula)
 ajustes_lm = mapply(evalua_lm, formulas, MoreArgs = list(datos = spam_procesado, subconjunto = indices_train))
 ajustes_glm = mapply(evalua_glm, formulas, MoreArgs = list(datos = spam_procesado, subconjunto = indices_train))
 # Creamos la matriz de datos en el formato que necesita glmnet
-x = model.matrix(as.formula(ajustes_glm[1,32]),spam_procesado)[,-ncol(spam_procesado)]
+x = model.matrix(as.formula(ajustes_glm[1,34]),spam_procesado)[,-ncol(spam_procesado)]
 y = spam_procesado$etiquetas
 # Obtenemos los errores de validación cruzada en el conjunto
-cv.out = cv.glmnet(x[indices_train,],y[indices_train],alpha=1)
+cv.out = cv.glmnet(x[indices_train,],y[indices_train],alpha=0)
 plot(cv.out)
 # Guardamos el lambda que ha dado menor error de validación cruzada
 bestlambda = cv.out$lambda.min
 # Obtenemos un modelo de Ridge
+grid = 10^seq(0,-5,length=100)
 modelo_ridge = glmnet(x,y,alpha=0,lambda=grid)
 # Calculamos las predicciones y el error asociado a ellas
 modelo_ridge.pred = predict(modelo_ridge,s=bestlambda,newx=x[-indices_train,])
-error_ridge = porcentaje_error(modelo_ridge.pred,spam_procesado[-indices_train,ncol(spam_procesado)])
+error_ridge = porcentaje_error(modelo_ridge.pred,spam_procesado[-indices_train,ncol(spam_procesado)],fp=1)
+# Calculamos una cota para E_out basada en E_test
+delta = 0.05 # Tolerancia
+N = nrow(spam_procesado)-length(indices_train) # N datos de test
+cota_test = calcular_cota_eout(N,delta) # E_test +/- esta cota * 100
+
+# Pinta la curva ROC
+rocplot = function(pred,truth,...){
+    predob = prediction(pred,truth)
+    perf = performance(predob,"tpr","fpr")
+    par(pty="s")
+    plot(perf,...)
+    par(pty="m")
+    perf
+}
