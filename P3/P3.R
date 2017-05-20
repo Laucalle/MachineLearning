@@ -114,3 +114,16 @@ formulas = apply(matrix(formulas,nrow=length(formulas)), 1, as.formula)
 # Obtenemos los resultados de evaluar todos los modelos
 ajustes_lm = mapply(evalua_lm, formulas, MoreArgs = list(datos = spam_procesado, subconjunto = indices_train))
 ajustes_glm = mapply(evalua_glm, formulas, MoreArgs = list(datos = spam_procesado, subconjunto = indices_train))
+# Creamos la matriz de datos en el formato que necesita glmnet
+x = model.matrix(as.formula(ajustes_glm[1,32]),spam_procesado)[,-ncol(spam_procesado)]
+y = spam_procesado$etiquetas
+# Obtenemos los errores de validación cruzada en el conjunto
+cv.out = cv.glmnet(x[indices_train,],y[indices_train],alpha=1)
+plot(cv.out)
+# Guardamos el lambda que ha dado menor error de validación cruzada
+bestlambda = cv.out$lambda.min
+# Obtenemos un modelo de Ridge
+modelo_ridge = glmnet(x,y,alpha=0,lambda=grid)
+# Calculamos las predicciones y el error asociado a ellas
+modelo_ridge.pred = predict(modelo_ridge,s=bestlambda,newx=x[-indices_train,])
+error_ridge = porcentaje_error(modelo_ridge.pred,spam_procesado[-indices_train,ncol(spam_procesado)])
