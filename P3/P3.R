@@ -91,7 +91,7 @@ calcular_cota_eout = function(N,delta) sqrt((log(delta/2))/(-2*N))
 
 spam = leer_datos_spam()
 # Preprocesar los datos 
-spam_procesado = preprocesar_datos(spam$datos,c("YeoJohnson","center","scale","pca"),0.85)
+spam_procesado = preprocesar_datos(spam$datos,c("nzv","YeoJohnson","center","scale","pca"),0.85)
 # Obtener el conjunto de entrenamiento
 indices_train = which(spam$conjuntos == 0)
 # Añadir las etiquetas para la regresión lineal
@@ -140,12 +140,19 @@ delta = 0.05 # Tolerancia
 N = nrow(spam_procesado)-length(indices_train) # N datos de test
 cota_test = calcular_cota_eout(N,delta) # E_test +/- esta cota * 100
 
-# Pinta la curva ROC
-rocplot = function(pred,truth,...){
+# Obtiene la curva de ROC o el área bajo la curva (AUC)
+roc_curve = function(pred,truth,area=F,...){
     predob = prediction(pred,truth)
-    perf = performance(predob,"tpr","fpr")
-    par(pty="s")
-    plot(perf,...)
-    par(pty="m")
+    if(area)
+        perf = performance(predob,"auc")
+    else{
+        perf = performance(predob,"tpr","fpr")
+        par(pty="s")
+        plot(perf,...)
+        par(pty="m")
+    }
     perf
 }
+
+curva = roc_curve(prediccion_test,spam_procesado[-indices_train,ncol(spam_procesado)])
+area = roc_curve(prediccion_test,spam_procesado[-indices_train,ncol(spam_procesado)],area=T)

@@ -1,0 +1,81 @@
+---
+title: "Práctica 3"
+author:
+    - "Laura Calle Caraballo"
+    - "Javier León Palomares"
+date: "21 de mayo de 2017"
+lang: es
+header-includes:
+    - \usepackage{amsmath}
+    - \usepackage{fancyhdr}
+    - \usepackage[math]{iwona}
+    - \usepackage{color}
+    - \usepackage{array}
+    - \pagestyle{fancy}
+    - \fancyhead[LO]{\textcolor[rgb]{0,0,0}{Grado en Ingeniería Informática}}
+    - \fancyhead[RO]{\textcolor[rgb]{0.2,0.2,0.9}{Aprendizaje Automático, Curso 2016-2017}}
+output: 
+    pdf_document:
+        fig_caption: yes
+        toc: true
+        number_sections: yes
+        highlight: pygments
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\newpage
+
+# Clasificación
+
+Usaremos la base de datos _SPAM E-mail Database_, que contiene 58 atributos distribuidos de la siguiente forma:
+
+\begin{itemize}
+
+    \item
+    48 variables reales continuas en el intervalo $[0,100]$ que corresponden a la proporción en la que aparecen 48 palabras concretas en un correo.
+    \item
+    6 variables reales continuas en el intervalo $[0,100]$ que corresponden a la proporción en la que aparecen los caracteres ; · ( · [ · ! · \$ · \#.
+    \item
+    Una variable real continua que representa la longitud media de las secuencias de caracteres en mayúsculas.
+    \item
+    Una variable entera continua que contiene la longitud de la mayor cadena de caracteres encontrada en mayúsculas.
+    \item
+    Una variable entera que corresponde al total de mayúsculas encontradas.
+    \item
+    La variable de respuesta (1 si el correo se consideró spam y 0 si no se consideró spam).
+
+\end{itemize}
+
+Esta base de datos no contiene valores perdidos y su proporción de etiquetas es de $39,4\%$ de positivos y $60,6\%$ de negativos.
+
+Las particiones de entrenamiento y test se encuentran ya definidas de tal forma que usaremos 3065 de los 4601 datos para ajustar los modelos y los 1536 restantes para realizar pruebas.
+
+## Preprocesamiento de datos.
+
+Para realizar el preprocesamiento de datos hemos empleado la función \texttt{preProcess} del paquete \texttt{caret}; esta función permite aplicar distintos métodos de transformación para adecuar las características iniciales a los modelos que vamos a emplear.
+
+A continuación vamos a explicar los métodos utilizados:
+
+\begin{itemize}
+
+    \item
+    Transformación de \textit{Yeo-Johnson}: es muy similar a la transformación de \textit{Box-Cox} pero, a diferencia de ésta, permite la existencia de valores negativos ó 0. En nuestro caso, no existen valores negativos pero sí es bastante frecuente encontrar valores iguales a 0.
+    \item
+    Centrado: se realiza la media de los valores de cada característica y se le resta a cada valor particular, siendo la nueva media igual a 0. Esto reduce las distancias entre las distintas características.
+    \item
+    Escalado: este método divide los valores por su desviación típica. El objetivo de esta transformación es tener características con rangos uniformes para evitar problemas con modelos que consideran distancias entre valores (lo cual favorecería las características con valores más separados entre sí); además, la independencia respecto a la escala en la que se realizaron las medidas también es importante.
+    \item
+    Análisis de componentes principales (\textit{PCA}): se buscan nuevos ejes de coordenadas de forma que la varianza de algunas características sea lo suficientemente pequeña como para descartarlas. Como resultado se consigue una reducción de dimensionalidad donde las nuevas características, que no guardan relación de significado con las originales, representarán la parte más significativa de la varianza de los datos.
+
+\end{itemize}
+
+Otro método que se podría haber utilizado para reducir la dimensionalidad de los datos es _Near Zero Variance_, que elimina predictores con varianza cercana a 0, ya que esto suele indicar que su valor es casi constante a lo largo de la muestra y apenas aportan información. En el caso de este conjunto de datos muchas de las características representan frecuencias de aparición de palabras concretas, por lo que es de esperar que en muchas observaciones estos valores sean 0; sin embargo, este hecho no implica que sus contribuciones no tengan importancia.
+
+## Clases de funciones a utilizar
+
+## Regularización
+
+## Modelos utilizados
