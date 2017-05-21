@@ -28,7 +28,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 \newpage
 
-# Clasificación
+# Clasificación.
 
 Usaremos la base de datos _SPAM E-mail Database_, que contiene 58 atributos distribuidos de la siguiente forma:
 
@@ -90,7 +90,7 @@ En el caso de las funciones lineales, la regularización no parece en principio 
 
 ## Modelos utilizados.
 
-En primer lugar, mediante la función \texttt{regsubsets} seleccionaremos las características con las que vamos a predecir la variable de respuesta. Esta selección de características se puede realizar de varias maneras diferentes:
+En primer lugar, es necesario hablar de \texttt{regsubsets}, función mediante la cual seleccionaremos los conjuntos características con las que construiremos distintos modelos para predecir la variable de respuesta. Dicha función proporciona, para un parámetro $n$, los conjuntos $\{C_1,C_2,\ldots,C_i,\ldots,C_n : |C_i| = i\}$ de los mejores predictores que encuentra.  Esta selección de características se puede realizar de varias maneras diferentes:
 
 \begin{itemize}
 
@@ -99,6 +99,10 @@ En primer lugar, mediante la función \texttt{regsubsets} seleccionaremos las ca
     \item
     Hacia atrás: se empieza contando con todas las variables y se elimina la que empeora de forma menos significativa la calidad del ajuste. El proceso se repite hasta que ninguna variable se puede eliminar sin deteriorar seriamente el modelo.
     \item
+    \textit{Sequential Replacement}: una combinación de variables predictoras (modelo) se representa mediante un vector y está asociada a una medida de su calidad. En cada iteración se realizan todos los reemplazos posibles de variables originales por otras variables y se escoge la mejor nueva combinación, que será el punto de partida de la siguiente iteración. Este proceso se repite hasta que no haya mejora (convergencia).
+    \item
     Exhaustiva: se utiliza \textit{Branch and Bound} para realizar una búsqueda lo más completa posible manteniendo un nivel aceptable de eficiencia.
     
 \end{itemize}
+
+En los casos en los que se haya realizado una reducción de dimensionalidad importante usaremos una búsqueda exhaustiva; sin embargo, si tenemos un número considerable de características deberemos optar por métodos más rápidos ya que el tiempo de ejecución la convertiría en inviable.
