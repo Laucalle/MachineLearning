@@ -74,8 +74,31 @@ A continuación vamos a explicar los métodos utilizados:
 
 Otro método que se podría haber utilizado para reducir la dimensionalidad de los datos es _Near Zero Variance_, que elimina predictores con varianza cercana a 0, ya que esto suele indicar que su valor es casi constante a lo largo de la muestra y apenas aportan información. En el caso de este conjunto de datos muchas de las características representan frecuencias de aparición de palabras concretas, por lo que es de esperar que en muchas observaciones estos valores sean 0; sin embargo, este hecho no implica que sus contribuciones no tengan importancia.
 
-## Clases de funciones a utilizar
+## Clases de funciones a utilizar.
 
-## Regularización
+Ya que esta práctica trata de ajustes de modelos lineales, las clases de funciones a utilizar serán, en principio, las correspondientes a polinomios de grado 1.
 
-## Modelos utilizados
+No obstante, si observásemos indicios de no linealidad, podríamos plantearnos realizar algún tipo de transformación no lineal utilizando, por ejemplo, los polinomios de _Legendre_.
+
+## Regularización.
+
+Es bastante común enfrentarnos al sobreajuste derivado de considerar una clase demasiado compleja sobre los datos de entrenamiento. Según el principio de la _navaja de Ockham_, la explicación más simple suele ser la correcta, por lo que una posible aproximación puede ser la simplificación.
+
+La regularización toma este concepto para proponer una solución al sobreajuste. La metodología se basa en penalizar los valores altos en las componentes del vector de pesos de la función (ya sea forzando que algunos pesos sean 0 ó restringiendo los valores de todos ellos, entre otras formas).
+
+En el caso de las funciones lineales, la regularización no parece en principio necesaria, debido a que únicamente consideraremos hiperplanos, el tipo más simple de clasificadores. Aun así, comprobaremos los efectos de aplicar esta técnica para demostrar que no es necesaria.
+
+## Modelos utilizados.
+
+En primer lugar, mediante la función \texttt{regsubsets} seleccionaremos las características con las que vamos a predecir la variable de respuesta. Esta selección de características se puede realizar de varias maneras diferentes:
+
+\begin{itemize}
+
+    \item
+    Hacia delante: se comienza sin variables y se añade, tras probarlas todas, la que produce una mejora más significativa del ajuste. Se repite este proceso hasta que ninguna incrementa la efectividad de forma estadísticamente notable.
+    \item
+    Hacia atrás: se empieza contando con todas las variables y se elimina la que empeora de forma menos significativa la calidad del ajuste. El proceso se repite hasta que ninguna variable se puede eliminar sin deteriorar seriamente el modelo.
+    \item
+    Exhaustiva: se utiliza \textit{Branch and Bound} para realizar una búsqueda lo más completa posible manteniendo un nivel aceptable de eficiencia.
+    
+\end{itemize}

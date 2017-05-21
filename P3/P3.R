@@ -91,7 +91,7 @@ calcular_cota_eout = function(N,delta) sqrt((log(delta/2))/(-2*N))
 
 spam = leer_datos_spam()
 # Preprocesar los datos 
-spam_procesado = preprocesar_datos(spam$datos,c("nzv","YeoJohnson","center","scale","pca"),0.85)
+spam_procesado = preprocesar_datos(spam$datos,c("YeoJohnson","center","scale","pca"),0.85)
 # Obtener el conjunto de entrenamiento
 indices_train = which(spam$conjuntos == 0)
 # Añadir las etiquetas para la regresión lineal
@@ -99,6 +99,7 @@ spam_procesado = cbind(spam_procesado,spam$etiquetas)
 colnames(spam_procesado)[ncol(spam_procesado)] = "etiquetas"
 # Hacer regresión lineal de las etiquetas según las otras características
 reg_lin_spam = lm(etiquetas~.,data=spam_procesado,subset=indices_train)
+# Error residual:       plot(reg_lin_spam,which=c(1))
 # Obtener predicciones de la regresión sobre los datos de test
 prediccion_test = evaluar_regresion(reg_lin_spam,spam_procesado[-indices_train,-ncol(spam_procesado)])
 # Porcentaje de error en el conjunto de test
