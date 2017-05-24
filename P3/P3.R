@@ -26,21 +26,22 @@ error_cuadratico = function(clasificados,reales){
     sum(apply(pares_errores,1,squared_error))/length(clasificados)
 }
 
-porcentaje_error = function(clasificados,reales,umbral=0.5,fp=1,fn=1){
+porcentaje_error = function(clasificados,reales,fp=1,fn=1){
     
-    if(min(reales) == 0){
-        
-        reales[reales == 0] = -1
-        clasificados[clasificados < umbral] = -1
-        clasificados[clasificados >= umbral] = 1
-        
-    }
-    
+    reales[reales == 0] = -1
     t = table(clasificados,reales)
     total_predicciones = sum(t)
     t[1,2] = t[1,2]*fn
     t[2,1] = t[2,1]*fp
     100*(1-sum(diag(t))/total_predicciones)
+    
+}
+
+categorizar = function(clasificados,umbral=0.5){
+    
+    clasificados[clasificados < umbral] = -1
+    clasificados[clasificados >= umbral] = 1
+    clasificados
     
 }
 
@@ -72,7 +73,7 @@ evaluar_regresion = function(regresion,datos){
 evalua_lm = function(formula,datos,subconjunto,fp=1,fn=1){
     reg_lin = do.call("lm", list(formula=formula, data=substitute(datos), subset=substitute(subconjunto)))
     prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
-    porc_error = porcentaje_error(prediccion_test,datos[-subconjunto,ncol(datos)],fp,fn)
+    porc_error = porcentaje_error(categorizar(prediccion_test),datos[-subconjunto,ncol(datos)],fp,fn)
     list(formula=formula, error = porc_error)
 }
 
@@ -80,7 +81,7 @@ evalua_lm = function(formula,datos,subconjunto,fp=1,fn=1){
 evalua_glm = function(formula,datos,subconjunto,fp=1,fn=1,familia=binomial()){
     reg_lin = do.call("glm", list(formula=formula, data=substitute(datos), subset=substitute(subconjunto),familia))
     prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
-    porc_error = porcentaje_error(prediccion_test,datos[-subconjunto,ncol(datos)],fp,fn)
+    porc_error = porcentaje_error(categorizar(prediccion_test),datos[-subconjunto,ncol(datos)],fp,fn)
     list(formula=formula, error = porc_error)
 }
 
@@ -103,7 +104,7 @@ reg_lin_spam = lm(etiquetas~.,data=spam_procesado,subset=indices_train)
 # Obtener predicciones de la regresión sobre los datos de test
 prediccion_test = evaluar_regresion(reg_lin_spam,spam_procesado[-indices_train,-ncol(spam_procesado)])
 # Porcentaje de error en el conjunto de test
-porc_error = porcentaje_error(prediccion_test,spam_procesado[-indices_train,ncol(spam_procesado)],fp=1)
+porc_error = porcentaje_error(categorizar(prediccion_test),spam_procesado[-indices_train,ncol(spam_procesado)],fp=1)
 # Buscamos exhaustivamente conjuntos de características que usar
 max_caracteristicas = ncol(spam_procesado)-1
 subsets_spam = regsubsets(etiquetas~.,data=spam_procesado[indices_train,],method="exhaustive",nvmax=max_caracteristicas)
@@ -135,7 +136,7 @@ grid = 10^seq(0,-5,length=100)
 modelo_ridge = glmnet(x,y,alpha=0,lambda=grid)
 # Calculamos las predicciones y el error asociado a ellas
 modelo_ridge.pred = predict(modelo_ridge,s=bestlambda,newx=x[-indices_train,])
-error_ridge = porcentaje_error(modelo_ridge.pred,spam_procesado[-indices_train,ncol(spam_procesado)],fp=1)
+error_ridge = porcentaje_error(categorizar(modelo_ridge.pred),spam_procesado[-indices_train,ncol(spam_procesado)],fp=1)
 # Calculamos una cota para E_out basada en E_test
 delta = 0.05 # Tolerancia
 N = nrow(spam_procesado)-length(indices_train) # N datos de test

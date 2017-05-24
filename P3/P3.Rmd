@@ -28,6 +28,100 @@ knitr::opts_chunk$set(echo = TRUE)
 
 \newpage
 
+```{r,echo=FALSE}
+library("caret", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
+library("e1071", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
+library("glmnet", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
+library("ROCR", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
+library("leaps", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
+```
+
+```{r,echo=FALSE}
+set.seed(3)
+
+clasificar_recta = function(punto, recta){
+    
+    sign(punto[2] - recta[1]*punto[1] - recta[2])
+    
+}
+
+error_cuadratico = function(clasificados,reales){
+    
+    squared_error = function(pair_h_y){ # (h(x) - y_n)^2
+        (pair_h_y[1]-pair_h_y[2])^2
+    }
+    
+    if(min(reales) == 0){
+        
+        reales[reales == 0] = -1
+        clasificados[clasificados < 0.5] = -1
+        clasificados[clasificados >= 0.5] = 1
+        
+    }
+    
+    pos_errores = which(clasificados != reales) # Qué etiquetas ha clasificado mal.
+    pares_errores = cbind(clasificados[pos_errores],reales[pos_errores],deparse.level=0)
+    # Sumamos los errores al cuadrado y hacemos la media.
+    sum(apply(pares_errores,1,squared_error))/length(clasificados)
+}
+
+porcentaje_error = function(clasificados,reales,fp=1,fn=1){
+    
+    reales[reales == 0] = -1
+    t = table(clasificados,reales)
+    total_predicciones = sum(t)
+    t[1,2] = t[1,2]*fn
+    t[2,1] = t[2,1]*fp
+    100*(1-sum(diag(t))/total_predicciones)
+    
+}
+
+categorizar = function(clasificados,umbral=0.5){
+    
+    clasificados[clasificados < umbral] = -1
+    clasificados[clasificados >= umbral] = 1
+    clasificados
+    
+}
+
+leer_datos_spam = function(){
+    
+    datos = read.table("./datos/spam.data")
+    conjuntos = read.table("./datos/spam.traintest")
+    etiquetas = datos[,ncol(datos)]
+    list(datos=datos[,-ncol(datos)],etiquetas=etiquetas,conjuntos=conjuntos)
+    
+}
+
+# Evalúa la regresión para unos datos
+evaluar_regresion = function(regresion,datos){
+    
+    predict(regresion,datos) # Los datos no deben incluir las etiquetas
+    
+}
+
+# Evalúa una regresión lineal dada una fórmula y unos datos de entrenamiento 
+evalua_lm = function(formula,datos,subconjunto,fp=1,fn=1){
+    reg_lin = do.call("lm", list(formula=formula, data=substitute(datos), subset=substitute(subconjunto)))
+    prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
+    porc_error = porcentaje_error(categorizar(prediccion_test),datos[-subconjunto,ncol(datos)],fp,fn)
+    list(formula=formula, error = porc_error)
+}
+
+# Evalúa una regresión lineal dada una fórmula, una familia y unos datos de entrenamiento 
+evalua_glm = function(formula,datos,subconjunto,fp=1,fn=1,familia=binomial()){
+    reg_lin = do.call("glm", list(formula=formula, data=substitute(datos), subset=substitute(subconjunto),familia))
+    prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
+    porc_error = porcentaje_error(categorizar(prediccion_test),datos[-subconjunto,ncol(datos)],fp,fn)
+    list(formula=formula, error = porc_error)
+}
+
+# Calcula una cota para E_out en función del error E_test
+calcular_cota_eout = function(N,delta) sqrt((log(delta/2))/(-2*N))
+
+spam = leer_datos_spam()
+```
+
 # Clasificación.
 
 Usaremos la base de datos _SPAM E-mail Database_, que contiene 58 atributos distribuidos de la siguiente forma:
@@ -74,6 +168,20 @@ A continuación vamos a explicar los métodos utilizados:
 
 Otro método que se podría haber utilizado para reducir la dimensionalidad de los datos es _Near Zero Variance_, que elimina predictores con varianza cercana a 0, ya que esto suele indicar que su valor es casi constante a lo largo de la muestra y apenas aportan información. En el caso de este conjunto de datos muchas de las características representan frecuencias de aparición de palabras concretas, por lo que es de esperar que en muchas observaciones estos valores sean 0; sin embargo, este hecho no implica que sus contribuciones no tengan importancia.
 
+Una vez explicadas las transformaciones, veamos cómo se traduce en la práctica a código:
+
+```{r}
+preprocesar_datos = function(datos,metodos,umbral_varianza){
+    
+    preprocess_obj = preProcess(datos,method=metodos,umbral_varianza)
+    nuevosDatos = predict(preprocess_obj,datos)
+    
+}
+
+# Preprocesamiento (centrado, escalado, análisis de componentes principales...)
+spam_procesado = preprocesar_datos(spam$datos,c("YeoJohnson","center","scale","pca"),0.85)
+```
+
 ## Clases de funciones a utilizar.
 
 Ya que esta práctica trata de ajustes de modelos lineales, las clases de funciones a utilizar serán, en principio, las correspondientes a polinomios de grado 1.
@@ -106,3 +214,6 @@ En primer lugar, es necesario hablar de \texttt{regsubsets}, función mediante l
 \end{itemize}
 
 En los casos en los que se haya realizado una reducción de dimensionalidad importante usaremos una búsqueda exhaustiva; sin embargo, si tenemos un número considerable de características deberemos optar por métodos más rápidos ya que el tiempo de ejecución la convertiría en inviable.
+
+Como modelos de ajuste hemos utilizado la regresión lineal proporcionada por la función \texttt{lm} y la regresión lineal logística proporcionada como una de las posibilidades de la función \texttt{glm}.
+
