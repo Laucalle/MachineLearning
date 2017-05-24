@@ -161,17 +161,17 @@ spam = leer_datos_spam()
 indices_train = which(spam$conjuntos == 0)
 
 # Función que encapsula el preprocesado de datos
-preprocesar_datos = function(datos,metodos,umbral_varianza){
+preprocesar_datos = function(datos,indices_train,metodos,umbral_varianza){
     
-    preprocess_obj = preProcess(datos,method=metodos,umbral_varianza)
-    nuevosDatos = predict(preprocess_obj,datos) # Aplica las transformaciones
+    preprocess_obj = preProcess(datos[indices_train,],method=metodos,umbral_varianza)
+    nuevosDatos = predict(preprocess_obj,datos)
     
 }
 
 # Preprocesamiento (Yeo-Johnson, centrado, escalado, análisis de componentes principales...)
-spam_procesado = preprocesar_datos(spam$datos,c("YeoJohnson","center","scale","pca"),0.85)
+spam_procesado = preprocesar_datos(spam$datos,indices_train,c("YeoJohnson","center","scale","pca"),0.85)
 # Sin PCA
-spam_procesado_sin_pca = preprocesar_datos(spam$datos,c("YeoJohnson","center","scale"),0.85)
+spam_procesado_sin_pca = preprocesar_datos(spam$datos,indices_train,c("YeoJohnson","center","scale"),0.85)
 ```
 ```{r,echo=FALSE,cache=TRUE}
 # Añadir las etiquetas para la regresión lineal
@@ -234,6 +234,7 @@ subconjuntos_formulas = function(datos,max_tam,metodo="exhaustive"){
     formulas = mapply(paste,rep("etiquetas~",max_tam),seleccionados,USE.NAMES = FALSE)
     # Construimos objetos fórmula
     formulas = apply(matrix(formulas,nrow=length(formulas)), 1, as.formula)
+    list(formulas=formulas,cp=subsets$cp,bic=subsets$bic)
 }
 ```
 
@@ -241,15 +242,17 @@ subconjuntos_formulas = function(datos,max_tam,metodo="exhaustive"){
 # Buscamos exhaustivamente conjuntos de características que usar
 max_caracteristicas = ncol(spam_procesado)-1
 # Calculamos los objetos fórmula para cada subconjunto de variables
-formulas = subconjuntos_formulas(spam_procesado[indices_train,],max_caracteristicas)
-formulas_sin_pca = subconjuntos_formulas(spam_procesado_sin_pca[indices_train,],max_caracteristicas,metodo="forward")
+seleccion_caracteristicas = subconjuntos_formulas(spam_procesado[indices_train,],max_caracteristicas)
+formulas = seleccion_caracteristicas$formulas
+seleccion_caracteristicas_sin_pca = subconjuntos_formulas(spam_procesado_sin_pca[indices_train,],max_caracteristicas,metodo="forward")
+formulas_sin_pca = seleccion_caracteristicas_sin_pca$formulas
 ```
 
 En esta función comenzamos obteniendo una matriz que nos indica qué variables se seleccionan para cada tamaño; a continuación, extraemos los nombres de las características para posteriormente construir sus fórmulas asociadas y así poder utilizarlas como argumento en las etapas siguientes de la experimentación.
 
 Como modelos básicos de ajuste hemos utilizado la regresión lineal con una familia de funciones gaussiana que implementa la función \texttt{lm} y la regresión lineal logística proporcionada como una de las posibilidades de la función \texttt{glm}. Asimismo, hemos considerado el uso de regularización para comprobar empíricamente si es útil en nuestro caso.
 
-Para realizar los experimentos sobre una base común, la misma colección de conjuntos de predictores obtenida mediante \texttt{regsubsets} será empleada tanto con \texttt{lm} como con \texttt{glm}. Para ambas funciones, la decisión de qué conjunto representa el mejor modelo se regirá por la proporción de etiquetas incorrectas frente al total. 
+Para realizar los experimentos sobre una base común, la misma colección de conjuntos de predictores obtenida mediante \texttt{regsubsets} será empleada tanto con \texttt{lm} como con \texttt{glm}. Para ambas funciones, la decisión de qué conjunto representa el mejor modelo se regirá por distintos criterios: la proporción de etiquetas incorrectas frente al total y los estimadores _Bayesian information criterion_ (BIC) y $C_p$. 
 
 Comenzando por la regresión lineal de la función \texttt{lm}, los únicos parámetros que necesita son los datos de entrenamiento ya procesados, sus etiquetas y las variables que va a utilizar para calcular la regresión. La función que encapsula el proceso hasta el cálculo del porcentaje de error es la siguiente:
 
@@ -299,4 +302,34 @@ ajustes_glm_sin_pca = mapply(evalua_glm, formulas_sin_pca,
                                              subconjunto = indices_train))
 ```
 
-Finalmente, antes de aplicar regularización, debemos estudiar en qué circunstancias tiene sentido. Una vez realizado el análisis de componentes principales, el cual ya elimina presumiblemente características que conduzcan a un sobreajuste, la regularización podría provocar _underfitting_ o infraajuste. No obstante, si omitimos la etapa de PCA este problema tiene menos posibilidades de presentarse, por lo que realizaremos el experimento en este último caso.
+Finalmente, antes de aplicar regularización debemos estudiar en qué circunstancias tiene sentido. Una vez realizado el análisis de componentes principales, el cual ya elimina presumiblemente características que conduzcan a un sobreajuste, la regularización podría provocar _underfitting_ o infraajuste. No obstante, si omitimos la etapa de PCA este problema tiene menos posibilidades de presentarse, por lo que realizaremos el experimento en este último caso.
+
+El paquete \texttt{glmnet} implementa la funcionalidad que necesitamos. La regularización precisa de un hiperparámetro $\lambda$ que hemos de calcular previamente usando la función \texttt{cv.glmnet}, la cual aplica validación cruzada para obtener el mejor valor de $\lambda$ (el que obtiene una menor tasa de error).
+
+```{r,cache=TRUE}
+# Creamos la matriz de datos en el formato que necesita glmnet
+x = model.matrix(etiquetas~.,spam_procesado_sin_pca)[,-ncol(spam_procesado_sin_pca)]
+y = spam_procesado_sin_pca$etiquetas
+# Obtenemos los errores de validación cruzada en el conjunto
+cv.out = cv.glmnet(x[indices_train,],y[indices_train],alpha=0)
+# Guardamos el lambda que ha dado menor error de validación cruzada
+bestlambda = cv.out$lambda.min
+```
+
+La función \texttt{cv.glmnet} devuelve, entre otros datos, un modelo que no consideraremos ya que es resultado del proceso de validación cruzada; esto significa que ha sido ajustado con un subconjunto del conjunto de entrenamiento y posiblemente no tenga la calidad suficiente.
+
+Por ello, vamos a hacer uso de la función \texttt{glmnet}; ésta recibe como parámetros los datos y etiquetas en el mismo formato que \texttt{cv.glmnet}, además de un $\alpha$ que varía entre 0 y 1 e indica la proporción en la que se aplican respectivamente _weight decay_ y _LASSO_, y un conjunto de valores de $\lambda$ que se encargará de probar (en nuestro caso, sólo el mejor $\lambda$ obtenido como ya hemos visto).
+
+```{r}
+# Obtenemos un modelo de Ridge
+modelo_ridge = glmnet(x,y,alpha=0,lambda=bestlambda)
+# Calculamos las predicciones y el error asociado a ellas
+modelo_ridge.pred = predict(modelo_ridge,s=bestlambda,newx=x[-indices_train,])
+error_ridge = porcentaje_error(categorizar(modelo_ridge.pred),
+                               spam_procesado[-indices_train,ncol(spam_procesado)],fp=1)
+```
+
+Una vez obtenidos los modelos, es el momento de estudiar sus tasas de error y elegir el mejor de ellos; lo haremos, pues, en la siguiente sección.
+
+## Selección del modelo final
+

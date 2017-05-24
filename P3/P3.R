@@ -55,9 +55,9 @@ leer_datos_spam = function(){
 }
 
 # Preprocesamiento (centrado, escalado, análisis de componentes principales...)
-preprocesar_datos = function(datos,metodos,umbral_varianza){
+preprocesar_datos = function(datos,indices_train,metodos,umbral_varianza){
     
-    preprocess_obj = preProcess(datos,method=metodos,umbral_varianza)
+    preprocess_obj = preProcess(datos[indices_train,],method=metodos,umbral_varianza)
     nuevosDatos = predict(preprocess_obj,datos)
     
 }
@@ -106,17 +106,18 @@ subconjuntos_formulas = function(datos,max_tam,metodo="exhaustive"){
     formulas = mapply(paste,rep("etiquetas~",max_tam),seleccionados,USE.NAMES = FALSE)
     # Construimos objetos fórmula
     formulas = apply(matrix(formulas,nrow=length(formulas)), 1, as.formula)
+    list(formulas=formulas,cp=subsets$cp,bic=subsets$bic)
     
 }
 
 # Clasificación: Email Spam
 
 spam = leer_datos_spam()
-# Preprocesar los datos 
-spam_procesado = preprocesar_datos(spam$datos,c("YeoJohnson","center","scale","pca"),0.85)
-spam_procesado_sin_pca = preprocesar_datos(spam$datos,c("YeoJohnson","center","scale"),0.85)
 # Obtener el conjunto de entrenamiento
 indices_train = which(spam$conjuntos == 0)
+# Preprocesar los datos 
+spam_procesado = preprocesar_datos(spam$datos,indices_train,c("YeoJohnson","center","scale","pca"),0.85)
+spam_procesado_sin_pca = preprocesar_datos(spam$datos,indices_train,c("YeoJohnson","center","scale"),0.85)
 # Añadir las etiquetas para la regresión lineal
 spam_procesado = cbind(spam_procesado,spam$etiquetas)
 spam_procesado_sin_pca = cbind(spam_procesado_sin_pca,spam$etiquetas)
@@ -132,15 +133,20 @@ porc_error = porcentaje_error(categorizar(prediccion_test),spam_procesado[-indic
 # Buscamos exhaustivamente conjuntos de características que usar
 max_caracteristicas = ncol(spam_procesado)-1
 # Calculamos los objetos fórmula para cada subconjunto de variables
-formulas = subconjuntos_formulas(spam_procesado[indices_train,],max_caracteristicas)
-formulas_sin_pca = subconjuntos_formulas(spam_procesado_sin_pca[indices_train,],max_caracteristicas,metodo="forward")
+seleccion_caracteristicas = subconjuntos_formulas(spam_procesado[indices_train,],max_caracteristicas)
+formulas = seleccion_caracteristicas$formulas
+seleccion_caracteristicas_sin_pca = subconjuntos_formulas(spam_procesado_sin_pca[indices_train,],max_caracteristicas,metodo="forward")
+formulas_sin_pca = seleccion_caracteristicas_sin_pca$formulas
 # Obtenemos los resultados de evaluar todos los modelos
 ajustes_lm = mapply(evalua_lm, formulas, MoreArgs = list(datos = spam_procesado, subconjunto = indices_train))
 ajustes_lm_sin_pca = mapply(evalua_lm, formulas_sin_pca, MoreArgs = list(datos = spam_procesado_sin_pca, subconjunto = indices_train))
 ajustes_glm = mapply(evalua_glm, formulas, MoreArgs = list(datos = spam_procesado, subconjunto = indices_train))
 ajustes_glm_sin_pca = mapply(evalua_glm, formulas_sin_pca, MoreArgs = list(datos = spam_procesado_sin_pca, subconjunto = indices_train))
 # Representamos cómo varía el error con los distintos conjuntos de fórmulas
-plot(x=1:ncol(ajustes_lm),y=ajustes_lm[2,],pch=20,ylim=c(6,12),col="blue")
+plot(x=1:ncol(ajustes_lm),y=ajustes_lm[2,],pch=20,ylim=c(6,13),col="blue",xlab="Tamaño del conjunto",ylab="Error porcentual")
+lines(x=1:ncol(ajustes_lm),y=ajustes_lm[2,],pch=20,col="blue")
+points(x=1:ncol(ajustes_glm),y=ajustes_glm[2,],pch=20,col="red")
+lines(x=1:ncol(ajustes_glm),y=ajustes_glm[2,],pch=20,col="red")
 # Creamos la matriz de datos en el formato que necesita glmnet
 x = model.matrix(etiquetas~.,spam_procesado_sin_pca)[,-ncol(spam_procesado_sin_pca)]
 y = spam_procesado_sin_pca$etiquetas
@@ -149,11 +155,10 @@ cv.out = cv.glmnet(x[indices_train,],y[indices_train],alpha=0)
 plot(cv.out)
 # Guardamos el lambda que ha dado menor error de validación cruzada
 bestlambda = cv.out$lambda.min
-# Obtenemos un modelo de Ridge
-grid = 10^seq(5,0,length=100)
-modelo_ridge = glmnet(x,y,alpha=0,lambda=grid)
+# Obtenemos un modelo de regresión ridge
+modelo_ridge = glmnet(x,y,alpha=0,lambda=bestlambda)
 # Calculamos las predicciones y el error asociado a ellas
-modelo_ridge.pred = predict(modelo_ridge,s=bestlambda,newx=x[-indices_train,])
+modelo_ridge.pred = predict(modelo_ridge,s=bestlambda,newx=x[-indices_train,]) 
 error_ridge = porcentaje_error(categorizar(modelo_ridge.pred),spam_procesado[-indices_train,ncol(spam_procesado)],fp=1)
 # Calculamos una cota para E_out basada en E_test
 delta = 0.05 # Tolerancia
