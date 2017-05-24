@@ -88,18 +88,42 @@ evalua_glm = function(formula,datos,subconjunto,fp=1,fn=1,familia=binomial()){
 # Calcula una cota para E_out en función del error E_test
 calcular_cota_eout = function(N,delta) sqrt((log(delta/2))/(-2*N))
 
+# Calcula objetos fórmula a partir de subconjuntos de variables
+# PRE: la columna de etiquetas se llama exactamente "etiquetas"
+subconjuntos_formulas = function(datos,max_tam,metodo="exhaustive"){
+    
+    # Obtenemos los subconjuntos de variables
+    subsets = regsubsets(etiquetas~.,data=datos,method=metodo,nvmax=max_tam)
+    # Obtenemos la matriz de características seleccionadas por grupos de tamaño desde 1 hasta nvmax
+    matriz_subsets = summary(subsets)$which[,-1]
+    # Guardamos, para cada fila, las columnas cuyas variables han sido seleccionadas.
+    seleccionados = apply(matriz_subsets,1,which)
+    # Obtenemos los nombres de esas columnas (para utilizarlos en la regresión)
+    seleccionados = lapply(seleccionados,names)
+    # Construimos la suma de las variables que usaremos en la regresión lineal
+    seleccionados = mapply(paste,seleccionados,MoreArgs=list(collapse="+"))
+    # Construimos strings equivalentes a las fórmulas que usaremos en la regresión lineal
+    formulas = mapply(paste,rep("etiquetas~",max_tam),seleccionados,USE.NAMES = FALSE)
+    # Construimos objetos fórmula
+    formulas = apply(matrix(formulas,nrow=length(formulas)), 1, as.formula)
+    
+}
+
 # Clasificación: Email Spam
 
 spam = leer_datos_spam()
 # Preprocesar los datos 
 spam_procesado = preprocesar_datos(spam$datos,c("YeoJohnson","center","scale","pca"),0.85)
+spam_procesado_sin_pca = preprocesar_datos(spam$datos,c("YeoJohnson","center","scale"),0.85)
 # Obtener el conjunto de entrenamiento
 indices_train = which(spam$conjuntos == 0)
 # Añadir las etiquetas para la regresión lineal
 spam_procesado = cbind(spam_procesado,spam$etiquetas)
+spam_procesado_sin_pca = cbind(spam_procesado_sin_pca,spam$etiquetas)
 colnames(spam_procesado)[ncol(spam_procesado)] = "etiquetas"
+colnames(spam_procesado_sin_pca)[ncol(spam_procesado_sin_pca)] = "etiquetas"
 # Hacer regresión lineal de las etiquetas según las otras características
-reg_lin_spam = lm(etiquetas~.,data=spam_procesado,subset=indices_train)
+reg_lin_spam = glm(etiquetas~.,data=spam_procesado,subset=indices_train,family=binomial())
 # Error residual:       plot(reg_lin_spam,which=c(1))
 # Obtener predicciones de la regresión sobre los datos de test
 prediccion_test = evaluar_regresion(reg_lin_spam,spam_procesado[-indices_train,-ncol(spam_procesado)])
@@ -107,32 +131,26 @@ prediccion_test = evaluar_regresion(reg_lin_spam,spam_procesado[-indices_train,-
 porc_error = porcentaje_error(categorizar(prediccion_test),spam_procesado[-indices_train,ncol(spam_procesado)],fp=1)
 # Buscamos exhaustivamente conjuntos de características que usar
 max_caracteristicas = ncol(spam_procesado)-1
-subsets_spam = regsubsets(etiquetas~.,data=spam_procesado[indices_train,],method="exhaustive",nvmax=max_caracteristicas)
-# Obtenemos la matriz de características seleccionadas por grupos de tamaño desde 1 hasta nvmax
-matriz_subconjuntos = summary(subsets_spam)$which[,-1]
-# Guardamos, para cada fila, las columnas cuyas variables han sido seleccionadas.
-seleccionados = apply(matriz_subconjuntos,1,which)
-# Obtenemos los nombres de esas columnas (para utilizarlos en la regresión)
-seleccionados = lapply(seleccionados,names)
-# Construimos la suma de las variables que usaremos en la regresión lineal
-seleccionados = mapply(paste,seleccionados,MoreArgs=list(collapse="+"))
-# Construimos strings equivalentes a las fórmulas que usaremos en la regresión lineal
-formulas = mapply(paste,rep("etiquetas~",max_caracteristicas),seleccionados,USE.NAMES = FALSE)
-# Construimos objetos fórmula
-formulas = apply(matrix(formulas,nrow=length(formulas)), 1, as.formula)
+# Calculamos los objetos fórmula para cada subconjunto de variables
+formulas = subconjuntos_formulas(spam_procesado[indices_train,],max_caracteristicas)
+formulas_sin_pca = subconjuntos_formulas(spam_procesado_sin_pca[indices_train,],max_caracteristicas,metodo="forward")
 # Obtenemos los resultados de evaluar todos los modelos
 ajustes_lm = mapply(evalua_lm, formulas, MoreArgs = list(datos = spam_procesado, subconjunto = indices_train))
+ajustes_lm_sin_pca = mapply(evalua_lm, formulas_sin_pca, MoreArgs = list(datos = spam_procesado_sin_pca, subconjunto = indices_train))
 ajustes_glm = mapply(evalua_glm, formulas, MoreArgs = list(datos = spam_procesado, subconjunto = indices_train))
+ajustes_glm_sin_pca = mapply(evalua_glm, formulas_sin_pca, MoreArgs = list(datos = spam_procesado_sin_pca, subconjunto = indices_train))
+# Representamos cómo varía el error con los distintos conjuntos de fórmulas
+plot(x=1:ncol(ajustes_lm),y=ajustes_lm[2,],pch=20,ylim=c(6,12),col="blue")
 # Creamos la matriz de datos en el formato que necesita glmnet
-x = model.matrix(as.formula(ajustes_glm[1,34]),spam_procesado)[,-ncol(spam_procesado)]
-y = spam_procesado$etiquetas
+x = model.matrix(etiquetas~.,spam_procesado_sin_pca)[,-ncol(spam_procesado_sin_pca)]
+y = spam_procesado_sin_pca$etiquetas
 # Obtenemos los errores de validación cruzada en el conjunto
 cv.out = cv.glmnet(x[indices_train,],y[indices_train],alpha=0)
 plot(cv.out)
 # Guardamos el lambda que ha dado menor error de validación cruzada
 bestlambda = cv.out$lambda.min
 # Obtenemos un modelo de Ridge
-grid = 10^seq(0,-5,length=100)
+grid = 10^seq(5,0,length=100)
 modelo_ridge = glmnet(x,y,alpha=0,lambda=grid)
 # Calculamos las predicciones y el error asociado a ellas
 modelo_ridge.pred = predict(modelo_ridge,s=bestlambda,newx=x[-indices_train,])

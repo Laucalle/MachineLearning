@@ -20,6 +20,9 @@ output:
         toc: true
         number_sections: yes
         highlight: pygments
+        includes:
+            after_body: P3Apendice.Rmd
+    
 ---
 
 ```{r setup, include=FALSE}
@@ -28,7 +31,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 \newpage
 
-```{r,echo=FALSE}
+```{r,echo=FALSE,message=FALSE}
 library("caret", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
 library("e1071", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
 library("glmnet", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
@@ -100,26 +103,8 @@ evaluar_regresion = function(regresion,datos){
     
 }
 
-# Evalúa una regresión lineal dada una fórmula y unos datos de entrenamiento 
-evalua_lm = function(formula,datos,subconjunto,fp=1,fn=1){
-    reg_lin = do.call("lm", list(formula=formula, data=substitute(datos), subset=substitute(subconjunto)))
-    prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
-    porc_error = porcentaje_error(categorizar(prediccion_test),datos[-subconjunto,ncol(datos)],fp,fn)
-    list(formula=formula, error = porc_error)
-}
-
-# Evalúa una regresión lineal dada una fórmula, una familia y unos datos de entrenamiento 
-evalua_glm = function(formula,datos,subconjunto,fp=1,fn=1,familia=binomial()){
-    reg_lin = do.call("glm", list(formula=formula, data=substitute(datos), subset=substitute(subconjunto),familia))
-    prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
-    porc_error = porcentaje_error(categorizar(prediccion_test),datos[-subconjunto,ncol(datos)],fp,fn)
-    list(formula=formula, error = porc_error)
-}
-
 # Calcula una cota para E_out en función del error E_test
 calcular_cota_eout = function(N,delta) sqrt((log(delta/2))/(-2*N))
-
-spam = leer_datos_spam()
 ```
 
 # Clasificación.
@@ -170,17 +155,33 @@ Otro método que se podría haber utilizado para reducir la dimensionalidad de l
 
 Una vez explicadas las transformaciones, veamos cómo se traduce en la práctica a código:
 
-```{r}
+```{r,cache=TRUE}
+# Lectura de datos y obtención del conjunto de entrenamiento
+spam = leer_datos_spam()
+indices_train = which(spam$conjuntos == 0)
+
+# Función que encapsula el preprocesado de datos
 preprocesar_datos = function(datos,metodos,umbral_varianza){
     
     preprocess_obj = preProcess(datos,method=metodos,umbral_varianza)
-    nuevosDatos = predict(preprocess_obj,datos)
+    nuevosDatos = predict(preprocess_obj,datos) # Aplica las transformaciones
     
 }
 
-# Preprocesamiento (centrado, escalado, análisis de componentes principales...)
+# Preprocesamiento (Yeo-Johnson, centrado, escalado, análisis de componentes principales...)
 spam_procesado = preprocesar_datos(spam$datos,c("YeoJohnson","center","scale","pca"),0.85)
+# Sin PCA
+spam_procesado_sin_pca = preprocesar_datos(spam$datos,c("YeoJohnson","center","scale"),0.85)
 ```
+```{r,echo=FALSE,cache=TRUE}
+# Añadir las etiquetas para la regresión lineal
+spam_procesado = cbind(spam_procesado,spam$etiquetas)
+spam_procesado_sin_pca = cbind(spam_procesado_sin_pca,spam$etiquetas)
+colnames(spam_procesado)[ncol(spam_procesado)] = "etiquetas"
+colnames(spam_procesado_sin_pca)[ncol(spam_procesado_sin_pca)] = "etiquetas"
+```
+
+Ya que existe la posibilidad de que el análisis de componentes principales elimine características relevantes, vamos a realizar experimentos separados preprocesando los datos con y sin esta técnica.
 
 ## Clases de funciones a utilizar.
 
@@ -194,11 +195,11 @@ Es bastante común enfrentarnos al sobreajuste derivado de considerar una clase 
 
 La regularización toma este concepto para proponer una solución al sobreajuste. La metodología se basa en penalizar los valores altos en las componentes del vector de pesos de la función (ya sea forzando que algunos pesos sean 0 ó restringiendo los valores de todos ellos, entre otras formas).
 
-En el caso de las funciones lineales, la regularización no parece en principio necesaria, debido a que únicamente consideraremos hiperplanos, el tipo más simple de clasificadores. Aun así, comprobaremos los efectos de aplicar esta técnica para demostrar que no es necesaria.
+En el caso de las funciones lineales, la regularización no parece en principio necesaria, debido a que únicamente consideraremos hiperplanos, el tipo más simple de clasificadores. Aun así, comprobaremos los efectos de aplicar esta técnica para asegurarnos que no es necesaria; en concreto, utilizaremos _weight decay_, proporcionado por el paquete \texttt{glmnet}.
 
 ## Modelos utilizados.
 
-En primer lugar, es necesario hablar de \texttt{regsubsets}, función mediante la cual seleccionaremos los conjuntos características con las que construiremos distintos modelos para predecir la variable de respuesta. Dicha función proporciona, para un parámetro $n$, los conjuntos $\{C_1,C_2,\ldots,C_i,\ldots,C_n : |C_i| = i\}$ de los mejores predictores que encuentra.  Esta selección de características se puede realizar de varias maneras diferentes:
+En primer lugar, es necesario hablar de \texttt{regsubsets}, función mediante la cual seleccionaremos los conjuntos de  características con las que construiremos distintos modelos para predecir la variable de respuesta. Dicha función proporciona, para un parámetro $n$, los conjuntos $\{C_1,C_2,\ldots,C_i,\ldots,C_n : |C_i| = i\}$ de los mejores predictores que encuentra. Esta selección de características se puede realizar de varias maneras diferentes:
 
 \begin{itemize}
 
@@ -213,7 +214,89 @@ En primer lugar, es necesario hablar de \texttt{regsubsets}, función mediante l
     
 \end{itemize}
 
-En los casos en los que se haya realizado una reducción de dimensionalidad importante usaremos una búsqueda exhaustiva; sin embargo, si tenemos un número considerable de características deberemos optar por métodos más rápidos ya que el tiempo de ejecución la convertiría en inviable.
+En los casos en los que se haya realizado una reducción de dimensionalidad importante usaremos una búsqueda exhaustiva. Sin embargo, si tenemos un número considerable de características deberemos optar por métodos más rápidos ya que el tiempo de ejecución la convertiría en inviable; en particular, si no utilizamos análisis de componentes principales, usaremos la búsqueda hacia delante.
 
-Como modelos de ajuste hemos utilizado la regresión lineal proporcionada por la función \texttt{lm} y la regresión lineal logística proporcionada como una de las posibilidades de la función \texttt{glm}.
+La función que utiliza \texttt{regsubsets} para obtener los subconjuntos de variables con los que vamos a probar en las distintas regresiones es la siguiente:
 
+```{r}
+subconjuntos_formulas = function(datos,max_tam,metodo="exhaustive"){
+    # Obtenemos los subconjuntos de variables
+    subsets = regsubsets(etiquetas~.,data=datos,method=metodo,nvmax=max_tam)
+    # Obtenemos la matriz de características seleccionadas por grupos de tamaño [1,nvmax]
+    matriz_subsets = summary(subsets)$which[,-1]
+    # Guardamos, para cada fila, las columnas cuyas variables han sido seleccionadas.
+    seleccionados = apply(matriz_subsets,1,which)
+    # Obtenemos los nombres de esas columnas (para utilizarlos en la regresión)
+    seleccionados = lapply(seleccionados,names)
+    # Construimos la suma de las variables que usaremos en la regresión lineal
+    seleccionados = mapply(paste,seleccionados,MoreArgs=list(collapse="+"))
+    # Construimos strings equivalentes a las fórmulas que usaremos en la regresión lineal
+    formulas = mapply(paste,rep("etiquetas~",max_tam),seleccionados,USE.NAMES = FALSE)
+    # Construimos objetos fórmula
+    formulas = apply(matrix(formulas,nrow=length(formulas)), 1, as.formula)
+}
+```
+
+```{r,echo=FALSE,cache=TRUE}
+# Buscamos exhaustivamente conjuntos de características que usar
+max_caracteristicas = ncol(spam_procesado)-1
+# Calculamos los objetos fórmula para cada subconjunto de variables
+formulas = subconjuntos_formulas(spam_procesado[indices_train,],max_caracteristicas)
+formulas_sin_pca = subconjuntos_formulas(spam_procesado_sin_pca[indices_train,],max_caracteristicas,metodo="forward")
+```
+
+En esta función comenzamos obteniendo una matriz que nos indica qué variables se seleccionan para cada tamaño; a continuación, extraemos los nombres de las características para posteriormente construir sus fórmulas asociadas y así poder utilizarlas como argumento en las etapas siguientes de la experimentación.
+
+Como modelos básicos de ajuste hemos utilizado la regresión lineal con una familia de funciones gaussiana que implementa la función \texttt{lm} y la regresión lineal logística proporcionada como una de las posibilidades de la función \texttt{glm}. Asimismo, hemos considerado el uso de regularización para comprobar empíricamente si es útil en nuestro caso.
+
+Para realizar los experimentos sobre una base común, la misma colección de conjuntos de predictores obtenida mediante \texttt{regsubsets} será empleada tanto con \texttt{lm} como con \texttt{glm}. Para ambas funciones, la decisión de qué conjunto representa el mejor modelo se regirá por la proporción de etiquetas incorrectas frente al total. 
+
+Comenzando por la regresión lineal de la función \texttt{lm}, los únicos parámetros que necesita son los datos de entrenamiento ya procesados, sus etiquetas y las variables que va a utilizar para calcular la regresión. La función que encapsula el proceso hasta el cálculo del porcentaje de error es la siguiente:
+
+```{r}
+evalua_lm = function(formula,datos,subconjunto,fp=1,fn=1){
+    # do.call pasa los parámetros a lm de forma correcta
+    reg_lin = do.call("lm", list(formula=formula, data=substitute(datos),
+                                 subset=substitute(subconjunto)))
+    prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
+    porc_error = porcentaje_error(categorizar(prediccion_test),
+                                  datos[-subconjunto,ncol(datos)],fp,fn)
+    list(formula=formula, error = porc_error)
+}
+```
+
+Para utilizar lo anterior en los datos con y sin selección de características sólo necesitamos las siguientes líneas:
+
+```{r,cache=TRUE}
+ajustes_lm = mapply(evalua_lm, formulas, MoreArgs = list(datos = spam_procesado,
+                                                    subconjunto = indices_train))
+ajustes_lm_sin_pca = mapply(evalua_lm, formulas_sin_pca,
+                            MoreArgs = list(datos = spam_procesado_sin_pca,
+                                            subconjunto = indices_train))
+```
+
+Del mismo modo, utilizaremos la función \texttt{glm} para calcular regresiones logísticas. Los parámetros requeridos son los mismos que para \texttt{lm} aunque con la inclusión de la familia de funciones que queremos utilizar, que por defecto es la gaussiana (correspondiente a la regresión lineal). Nosotros emplearemos la binomial, ya que trata con la probabilidad de etiquetar una observación en una de dos posibles categorías; en otras palabras, implementa la regresión logística. De nuevo, la función de \texttt{R} que encapsula el uso de \texttt{glm} se muestra a continuación:
+
+```{r}
+evalua_glm = function(formula,datos,subconjunto,fp=1,fn=1,familia=binomial()){
+    reg_lin = do.call("glm", list(formula=formula, data=substitute(datos),
+                                  subset=substitute(subconjunto),familia))
+    prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
+    porc_error = porcentaje_error(categorizar(prediccion_test),
+                                  datos[-subconjunto,ncol(datos)],fp,fn)
+    list(formula=formula, error = porc_error)
+}
+```
+
+Las llamadas a función para calcular las regresiones logísticas quedan, pues, de la siguiente forma:
+
+```{r,cache=TRUE}
+ajustes_glm = mapply(evalua_glm, formulas, 
+                     MoreArgs = list(datos = spam_procesado, 
+                                     subconjunto = indices_train))
+ajustes_glm_sin_pca = mapply(evalua_glm, formulas_sin_pca, 
+                             MoreArgs = list(datos = spam_procesado_sin_pca,
+                                             subconjunto = indices_train))
+```
+
+Finalmente, antes de aplicar regularización, debemos estudiar en qué circunstancias tiene sentido. Una vez realizado el análisis de componentes principales, el cual ya elimina presumiblemente características que conduzcan a un sobreajuste, la regularización podría provocar _underfitting_ o infraajuste. No obstante, si omitimos la etapa de PCA este problema tiene menos posibilidades de presentarse, por lo que realizaremos el experimento en este último caso.
