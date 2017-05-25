@@ -106,7 +106,7 @@ subconjuntos_formulas = function(datos,max_tam,metodo="exhaustive"){
     formulas = mapply(paste,rep("etiquetas~",max_tam),seleccionados,USE.NAMES = FALSE)
     # Construimos objetos fórmula
     formulas = apply(matrix(formulas,nrow=length(formulas)), 1, as.formula)
-    list(formulas=formulas,cp=subsets$cp,bic=subsets$bic)
+    list(formulas=formulas,cp=summary(subsets)$cp,bic=summary(subsets)$bic)
     
 }
 
@@ -143,10 +143,33 @@ ajustes_lm_sin_pca = mapply(evalua_lm, formulas_sin_pca, MoreArgs = list(datos =
 ajustes_glm = mapply(evalua_glm, formulas, MoreArgs = list(datos = spam_procesado, subconjunto = indices_train))
 ajustes_glm_sin_pca = mapply(evalua_glm, formulas_sin_pca, MoreArgs = list(datos = spam_procesado_sin_pca, subconjunto = indices_train))
 # Representamos cómo varía el error con los distintos conjuntos de fórmulas
-plot(x=1:ncol(ajustes_lm),y=ajustes_lm[2,],pch=20,ylim=c(6,13),col="blue",xlab="Tamaño del conjunto",ylab="Error porcentual")
+lm_min_error_index = which.min(unlist(ajustes_lm[2,]))
+min_cp_index = which.min(seleccion_caracteristicas$cp)
+min_bic_index = which.min(seleccion_caracteristicas$bic)
+plot(x=1:ncol(ajustes_lm),y=ajustes_lm[2,],pch=20,ylim=c(6,13),col="blue",xlab="Tamaño del conjunto",ylab="Error porcentual", main = "Regresión lineal")
 lines(x=1:ncol(ajustes_lm),y=ajustes_lm[2,],pch=20,col="blue")
-points(x=1:ncol(ajustes_glm),y=ajustes_glm[2,],pch=20,col="red")
-lines(x=1:ncol(ajustes_glm),y=ajustes_glm[2,],pch=20,col="red")
+points(x=lm_min_error_index, y=min(unlist(ajustes_lm[2,])), pch=10, col="red")
+points(x=min_cp_index, y=ajustes_lm[2,min_cp_index], pch=10, col="green")
+
+
+plot(x=1:ncol(ajustes_glm),y=ajustes_glm[2,],pch=20,ylim=c(6,13),col="blue",xlab="Tamaño del conjunto",ylab="Error porcentual", main = "Regresión logística")
+lines(x=1:ncol(ajustes_glm),y=ajustes_glm[2,],pch=20,col="blue")
+points(x=which.min(unlist(ajustes_glm[2,])), y=min(unlist(ajustes_glm[2,])), pch=10, col="red")
+points(x=min_cp_index, y=ajustes_glm[2,min_cp_index], pch=10, col="green")
+glm_min_error_index = which.min(unlist(ajustes_glm[2,]))
+
+
+sp_min_cp_index = which.min(seleccion_caracteristicas_sin_pca$cp)
+sp_min_bic_index = which.min(seleccion_caracteristicas_sin_pca$bic)
+plot(x=1:ncol(ajustes_lm_sin_pca),y=ajustes_lm_sin_pca[2,],pch=20,ylim=c(6,21),col="blue",xlab="Tamaño del conjunto",ylab="Error porcentual", main = "Regresión lineal sin PCA")
+lines(x=1:ncol(ajustes_lm_sin_pca),y=ajustes_lm_sin_pca[2,],pch=20,col="blue")
+points(x=which.min(unlist(ajustes_lm_sin_pca[2,])), y=min(unlist(ajustes_lm_sin_pca[2,])), pch=10, col="red")
+lm_sp_min_error_index = which.min(unlist(ajustes_lm_sin_pca[2,]))
+
+plot(x=1:ncol(ajustes_glm_sin_pca),y=ajustes_glm_sin_pca[2,],pch=20,ylim=c(6,21),col="blue",xlab="Tamaño del conjunto",ylab="Error porcentual", main = "Regresión logística sin PCA")
+lines(x=1:ncol(ajustes_glm_sin_pca),y=ajustes_glm_sin_pca[2,],pch=20,col="blue")
+points(x=which.min(unlist(ajustes_glm_sin_pca[2,])), y=min(unlist(ajustes_glm_sin_pca[2,])), pch=10, col="red")
+glm_sp_min_error_index = which.min(unlist(ajustes_glm_sin_pca[2,]))
 # Creamos la matriz de datos en el formato que necesita glmnet
 x = model.matrix(etiquetas~.,spam_procesado_sin_pca)[,-ncol(spam_procesado_sin_pca)]
 y = spam_procesado_sin_pca$etiquetas
