@@ -32,11 +32,11 @@ knitr::opts_chunk$set(echo = TRUE)
 \newpage
 
 ```{r,echo=FALSE,message=FALSE}
-library("caret", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.4")
-library("e1071", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.4")
-library("glmnet", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.4")
-library("ROCR", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.4")
-library("leaps", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.4")
+library("caret", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
+library("e1071", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
+library("glmnet", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
+library("ROCR", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
+library("leaps", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
 ```
 
 ```{r,echo=FALSE}
@@ -153,6 +153,8 @@ A continuación vamos a explicar los métodos utilizados:
 
 Otro método que se podría haber utilizado para reducir la dimensionalidad de los datos es _Near Zero Variance_, que elimina predictores con varianza cercana a 0, ya que esto suele indicar que su valor es casi constante a lo largo de la muestra y apenas aportan información. En el caso de este conjunto de datos muchas de las características representan frecuencias de aparición de palabras concretas, por lo que es de esperar que en muchas observaciones estos valores sean 0; sin embargo, este hecho no implica que sus contribuciones no tengan importancia.
 
+\newpage
+
 Una vez explicadas las transformaciones, veamos cómo se traduce en la práctica a código:
 
 ```{r,cache=TRUE}
@@ -169,9 +171,11 @@ preprocesar_datos = function(datos,indices_train,metodos,umbral_varianza){
 }
 
 # Preprocesamiento (Yeo-Johnson, centrado, escalado, análisis de componentes principales...)
-spam_procesado = preprocesar_datos(spam$datos,indices_train,c("YeoJohnson","center","scale","pca"),0.85)
+spam_procesado = preprocesar_datos(spam$datos,indices_train,
+                                   c("YeoJohnson","center","scale","pca"),0.85)
 # Sin PCA
-spam_procesado_sin_pca = preprocesar_datos(spam$datos,indices_train,c("YeoJohnson","center","scale"),0.85)
+spam_procesado_sin_pca = preprocesar_datos(spam$datos,indices_train,
+                                           c("YeoJohnson","center","scale"),0.85)
 ```
 ```{r,echo=FALSE,cache=TRUE}
 # Añadir las etiquetas para la regresión lineal
@@ -196,6 +200,8 @@ Es bastante común enfrentarnos al sobreajuste derivado de considerar una clase 
 La regularización toma este concepto para proponer una solución al sobreajuste. La metodología se basa en penalizar los valores altos en las componentes del vector de pesos de la función (ya sea forzando que algunos pesos sean 0 ó restringiendo los valores de todos ellos, entre otras formas).
 
 En el caso de las funciones lineales, la regularización no parece en principio necesaria, debido a que únicamente consideraremos hiperplanos, el tipo más simple de clasificadores. Aun así, comprobaremos los efectos de aplicar esta técnica para asegurarnos que no es necesaria; en concreto, utilizaremos _weight decay_, proporcionado por el paquete \texttt{glmnet}.
+
+\newpage
 
 ## Modelos utilizados.
 
@@ -241,10 +247,11 @@ subconjuntos_formulas = function(datos,max_tam,metodo="exhaustive"){
 ```{r,echo=FALSE,cache=TRUE}
 # Buscamos exhaustivamente conjuntos de características que usar
 max_caracteristicas = ncol(spam_procesado)-1
+max_caracteristicas_sin_pca = ncol(spam_procesado_sin_pca)-1
 # Calculamos los objetos fórmula para cada subconjunto de variables
 seleccion_caracteristicas = subconjuntos_formulas(spam_procesado[indices_train,],max_caracteristicas)
 formulas = seleccion_caracteristicas$formulas
-seleccion_caracteristicas_sin_pca = subconjuntos_formulas(spam_procesado_sin_pca[indices_train,],max_caracteristicas,metodo="forward")
+seleccion_caracteristicas_sin_pca = subconjuntos_formulas(spam_procesado_sin_pca[indices_train,],max_caracteristicas_sin_pca,metodo="forward")
 formulas_sin_pca = seleccion_caracteristicas_sin_pca$formulas
 ```
 
@@ -282,12 +289,11 @@ Del mismo modo, utilizaremos la función \texttt{glm} para calcular regresiones 
 
 ```{r}
 evalua_glm = function(formula,datos,subconjunto,fp=1,fn=1,familia=binomial()){
-    reg_lin = do.call("glm", list(formula=formula, data=substitute(datos),
-                                  subset=substitute(subconjunto),familia))
+    reg_lin = do.call("glm", list(formula=formula, data=substitute(datos), subset=substitute(subconjunto),familia))
     prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
     porc_error = porcentaje_error(categorizar(prediccion_test),
                                   datos[-subconjunto,ncol(datos)],fp,fn)
-    list(formula=formula, error = porc_error)
+    list(formula=formula, error=porc_error,reg=reg_lin)
 }
 ```
 
@@ -303,6 +309,8 @@ ajustes_glm_sin_pca = mapply(evalua_glm, formulas_sin_pca,
 ```
 
 Finalmente, antes de aplicar regularización debemos estudiar en qué circunstancias tiene sentido. Una vez realizado el análisis de componentes principales, el cual ya elimina presumiblemente características que conduzcan a un sobreajuste, la regularización podría provocar _underfitting_ o infraajuste. No obstante, si omitimos la etapa de PCA este problema tiene menos posibilidades de presentarse, por lo que realizaremos el experimento en este último caso.
+
+\newpage
 
 El paquete \texttt{glmnet} implementa la funcionalidad que necesitamos. La regularización precisa de un hiperparámetro $\lambda$ que hemos de calcular previamente usando la función \texttt{cv.glmnet}, la cual aplica validación cruzada para obtener el mejor valor de $\lambda$ (el que obtiene una menor tasa de error).
 
@@ -331,9 +339,10 @@ error_ridge = porcentaje_error(categorizar(modelo_ridge.pred),
 
 Una vez obtenidos los modelos, es el momento de estudiar sus tasas de error y elegir el mejor de ellos; lo haremos, pues, en la siguiente sección.
 
-## Selección del modelo final
+## Selección del modelo final.
 
-Para seleccionar un modelo, en primer lugar  estudiaremos las tasas de error. El cáculo de dicho error hace uso de la matriz de confusión y se ha implementado como se mmuestra a continuación, donde \texttt{fp} y \texttt{fn} corresponden al peso que se le da a falsos positivos y falsos negativos respectivamente. En este caso ambos tendrán el mismo coste ya que, aunque la semántica de nuestro problema sugiere que los falsos positivos se penalicen sobre los falsos negativos, no se proporciona una matriz de coste. 
+Para seleccionar un modelo estudiaremos en primer lugar las tasas de error. El cálculo de dicho error hace uso de la matriz de confusión y se ha implementado como se muestra a continuación, donde \texttt{fp} y \texttt{fn} corresponden a las penalizaciones que se le dan a falsos positivos y falsos negativos respectivamente. En este caso ambos tendrán el mismo coste ya que, aunque la semántica de nuestro problema sugiere que los falsos positivos se penalicen sobre los falsos negativos, no se proporciona una matriz de coste.
+
 ```{r}
 porcentaje_error = function(clasificados,reales,fp=1,fn=1){
     reales[reales == 0] = -1
@@ -345,55 +354,77 @@ porcentaje_error = function(clasificados,reales,fp=1,fn=1){
 }
 ```
 
-Como hemos generado varios conjuntos de modelos utilizando las funciones \texttt{lm} y \texttt{glm}, podemos comenzar comparando y eligiendo un modelo que represente cada uno de estos conjuntos, el mejor de ellos. Las siguientes gráficas muestran los errores obtenidos con diferentes subconjuntos de predictores para los datos con y sin análisis de componentes principales:
+\newpage
 
+Como hemos generado varios conjuntos de modelos utilizando las funciones \texttt{lm} y \texttt{glm}, podemos comenzar comparando y eligiendo un modelo que represente cada uno de estos conjuntos (el mejor de ellos). Las siguientes gráficas muestran los errores obtenidos con diferentes subconjuntos de predictores para los datos con y sin análisis de componentes principales:
+
+\vspace{1cm}
 ```{r, echo=FALSE}
 par(mfrow=c(2,2))
+# Con PCA
+
 lm_min_error_index = which.min(unlist(ajustes_lm[2,]))
-min_bic_index = which.min(seleccion_caracteristicas$bic)
-
-min_cp_index = which.min(seleccion_caracteristicas$cp)
-plot(x=1:ncol(ajustes_lm),y=ajustes_lm[2,],pch=20,ylim=c(6,13),col="blue",xlab="Tamaño del conjunto",ylab="Error porcentual", main = "Regresión lineal")
-lines(x=1:ncol(ajustes_lm),y=ajustes_lm[2,],pch=20,col="blue")
-points(x=lm_min_error_index, y=min(unlist(ajustes_lm[2,])), pch=10, col="red")
-points(x=min_cp_index, y=ajustes_lm[2,min_cp_index], pch=10, col="green")
-
-
-plot(x=1:ncol(ajustes_glm),y=ajustes_glm[2,],pch=20,ylim=c(6,13),col="blue",xlab="Tamaño del conjunto",ylab="Error porcentual", main = "Regresión logística")
-lines(x=1:ncol(ajustes_glm),y=ajustes_glm[2,],pch=20,col="blue")
-points(x=which.min(unlist(ajustes_glm[2,])), y=min(unlist(ajustes_glm[2,])), pch=10, col="red")
-points(x=min_cp_index, y=ajustes_glm[2,min_cp_index], pch=10, col="green")
 glm_min_error_index = which.min(unlist(ajustes_glm[2,]))
-par(c(1,1), pty = "m")
-```
+min_bic_index = which.min(seleccion_caracteristicas$bic)
+min_cp_index = which.min(seleccion_caracteristicas$cp)
 
-```{r, echo=FALSE}
-par(mfrow=c(2,2))
+plot(x=1:ncol(ajustes_lm),y=ajustes_lm[2,],pch=20,ylim=c(6,13),col="blue",xlab="Tamaño del conjunto",ylab="Error porcentual", main = "Regresión lineal con PCA")
+lines(x=1:ncol(ajustes_lm),y=ajustes_lm[2,],pch=20,col="blue")
+points(x=lm_min_error_index, y=ajustes_lm[2,lm_min_error_index], pch=10, col="red")
+points(x=min_cp_index, y=ajustes_lm[2,min_cp_index], pch=10, col="green")
+points(x=min_bic_index, y=ajustes_lm[2,min_bic_index], pch=10, col="orange")
+
+plot(x=1:ncol(ajustes_glm),y=ajustes_glm[2,],pch=20,ylim=c(6,13),col="blue",xlab="Tamaño del conjunto",ylab="Error porcentual", main = "Regresión logística con PCA")
+lines(x=1:ncol(ajustes_glm),y=ajustes_glm[2,],pch=20,col="blue")
+points(x=glm_min_error_index, y=ajustes_glm[2,glm_min_error_index], pch=10, col="red")
+points(x=min_cp_index, y=ajustes_glm[2,min_cp_index], pch=10, col="green")
+points(x=min_bic_index, y=ajustes_glm[2,min_bic_index], pch=10, col="orange")
+
+# Sin PCA
+
+lm_sp_min_error_index = which.min(unlist(ajustes_lm_sin_pca[2,]))
+glm_sp_min_error_index = which.min(unlist(ajustes_glm_sin_pca[2,]))
 sp_min_cp_index = which.min(seleccion_caracteristicas_sin_pca$cp)
 sp_min_bic_index = which.min(seleccion_caracteristicas_sin_pca$bic)
 
 plot(x=1:ncol(ajustes_lm_sin_pca),y=ajustes_lm_sin_pca[2,],pch=20,ylim=c(6,21),col="blue",xlab="Tamaño del conjunto",ylab="Error porcentual", main = "Regresión lineal sin PCA")
 lines(x=1:ncol(ajustes_lm_sin_pca),y=ajustes_lm_sin_pca[2,],pch=20,col="blue")
-points(x=which.min(unlist(ajustes_lm_sin_pca[2,])), y=min(unlist(ajustes_lm_sin_pca[2,])), pch=10, col="red")
-lm_sp_min_error_index = which.min(unlist(ajustes_lm_sin_pca[2,]))
+points(x=lm_sp_min_error_index, y=ajustes_lm_sin_pca[2,lm_sp_min_error_index], pch=10, col="red")
+points(x=sp_min_cp_index, y=ajustes_lm_sin_pca[2,sp_min_cp_index], pch=10, col="green")
+points(x=sp_min_bic_index, y=ajustes_lm_sin_pca[2,sp_min_bic_index], pch=10, col="orange")
 
 plot(x=1:ncol(ajustes_glm_sin_pca),y=ajustes_glm_sin_pca[2,],pch=20,ylim=c(6,21),col="blue",xlab="Tamaño del conjunto",ylab="Error porcentual", main = "Regresión logística sin PCA")
 lines(x=1:ncol(ajustes_glm_sin_pca),y=ajustes_glm_sin_pca[2,],pch=20,col="blue")
-points(x=which.min(unlist(ajustes_glm_sin_pca[2,])), y=min(unlist(ajustes_glm_sin_pca[2,])), pch=10, col="red")
-glm_sp_min_error_index = which.min(unlist(ajustes_glm_sin_pca[2,]))
+points(x=glm_sp_min_error_index, y=ajustes_glm_sin_pca[2,glm_sp_min_error_index], pch=10, col="red")
+points(x=sp_min_cp_index, y=ajustes_glm_sin_pca[2,sp_min_cp_index], pch=10, col="green")
+points(x=sp_min_bic_index, y=ajustes_glm_sin_pca[2,sp_min_bic_index], pch=10, col="orange")
 par(c(1,1), pty = "m")
 ```
+\vspace{1cm}
 
-Se han marcado en rojo los modelos con los que se obtiene el mínimo error, en verde los obtenidos con el estimador $C_p$ proporcionado por \texttt{regsubsets}. Este estimador, además de utilizar el error cuadrático estimado del ajuste realizado por un subconjunto de predictores, añade una penalización al número de características escogidas. Su objetivo es evitar el sobreajuste, puesto que un número de predictores elevado puede resultar en que características que no son de relevancia jueguen un papel importante en el modelo, obteniendo resultados pobres al aplicarse a nuevas observaciones. _BIC_ es un estimador similar, que se diferencia del primero en el cálculo de la penalización. Para ello, tiene en cuenta el número total de observaciones además del número de características seleccionadas, por lo que generalmente elige modelos con menos predictores que $C_p$. 
+Los modelos con los que se obtiene el mínimo $E_{test}$ se han marcado en rojo; adicionalmente, se han destacado en verde los obtenidos con $C_p$ y en naranja los obtenidos con _BIC_, ambos proporcionados por \texttt{regsubsets}. El estimador $C_p$, además de utilizar el error cuadrático estimado del ajuste realizado por un subconjunto de predictores, añade una penalización al número de características escogidas. Su objetivo es evitar el sobreajuste, puesto que un número de predictores elevado puede resultar en que características que no son de relevancia jueguen un papel importante en el modelo, obteniendo resultados pobres al aplicarse a nuevas observaciones. _BIC_ es un estimador similar que se diferencia del primero en el cálculo de la penalización. Para ello, tiene en cuenta el número total de observaciones además del número de características seleccionadas, por lo que generalmente elige modelos con menos predictores que $C_p$. 
 
-En la siguiente tabla se muestran, para los distintos tipos de ajuste y datos, que modelos se han seleccionado siguiendo los tres criterios descritos. Para cada modelo se proporcionan el $E_{test}$ y el número de predictores utilizado.
+En la siguiente tabla se muestran, para los distintos tipos de ajuste y datos, los modelos seleccionados siguiendo los tres criterios descritos. Para cada modelo se proporcionan el $E_{test}$ y el número de predictores utilizado.
 
-|                     | Error Mínimo   |        | Estimador $C_p$   |        | Estimador  _BIC_   |        |
-|---------------------|----------------|--------|-------------------|--------|--------------------|--------|
-|                     | $E_{test}$     | Tamaño | $E_{test}$        | Tamaño | $E_{test}$         | Tamaño |
-| Ajustes lm          | 7.226562       | 33     | 7.291667          | 31     | 7.942708           | 22     |
-| Ajustes glm         | 6.184896       | 23     | 6.445312          | 31     | 6.510417           | 22     |
-| Ajustes lm sin PCA  | 6.705729       | 28     | 6.901042          | 34     | 6.966146           | 26     |
-| Ajustes glm sin PCA | 6.25           | 31     | 6.315104          | 34     | 6.510417           | 26     |
+|                     |   Error Mínimo   |          | Estimador $C_p$     |          | Estimador  _BIC_     |          |
+|---------------------|:----------------:|:--------:|:-------------------:|:--------:|:--------------------:|:--------:|
+|                     | $E_{test}$       | Tamaño   | $E_{test}$          | Tamaño   | $E_{test}$           | Tamaño   |
+| Ajustes lm          | 7.226562         | 33       | 7.291667            | 31       | 7.942708             | 22       |
+| Ajustes glm         | 6.184896         | 23       | 6.445312            | 31       | 6.510417             | 22       |
+| Ajustes lm sin PCA  | 6.705729         | 28       | 6.901042            | 34       | 6.966146             | 26       |
+| Ajustes glm sin PCA | 6.25             | 31       | 6.315104            | 34       | 6.510417             | 26       |
 
-A la vista de estos resultados parece razonable elegir los modelos que dan el menor error en la partición de test. Sin embargo en algunos casos como en el ajuste de regresión lineal con PCA, en el que la diferencia entre el error mínimo y el sugerido por el estimador $C_p$ no es muy significativa, podemos preferir este segundo modelo ya que su dimensionalidad es menor. 
+A la vista de estos resultados parece razonable elegir los modelos que dan el menor error en la partición de test. Sin embargo, en algunos casos como en el ajuste de regresión lineal con PCA, en el que la diferencia entre el error mínimo y el sugerido por el estimador $C_p$ no es muy significativa, podemos preferir este segundo modelo ya que su dimensionalidad es menor. 
+
+Aunque estos números parecen indicarnos el modelo a elegir, antes de decidirnos por uno de ellos vamos a realizar sobre los 4 mejores otro tipo de análisis, el basado en la curva _ROC_ (_Receiver Operating Characteristic_); esta curva representa la tasa de verdaderos positivos frente a la tasa de falsos positivos, y el área bajo ella nos dará una medida de lo acertado de las predicciones de un modelo.
+
+En \texttt{R} podemos trabajar con curvas _ROC_ usando el paquete \texttt{ROCR}. Vamos a ver una función que a partir de unas predicciones y unas etiquetas reales nos devuelve el valor de área y la curva lista para ser representada con \texttt{plot}:
+
+```{r}
+calcula_curva_roc = function(pred,truth){
+    predob = prediction(pred,truth)
+    area = performance(predob,"auc")
+    curva = performance(predob,"tpr","fpr")
+    list(curva=curva,area=area)
+}
+```
