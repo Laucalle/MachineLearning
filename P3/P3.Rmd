@@ -289,7 +289,8 @@ Del mismo modo, utilizaremos la función \texttt{glm} para calcular regresiones 
 
 ```{r}
 evalua_glm = function(formula,datos,subconjunto,fp=1,fn=1,familia=binomial()){
-    reg_lin = do.call("glm", list(formula=formula, data=substitute(datos), subset=substitute(subconjunto),familia))
+    reg_lin = do.call("glm", list(formula=formula, data=substitute(datos),
+                                  subset=substitute(subconjunto),familia))
     prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
     porc_error = porcentaje_error(categorizar(prediccion_test),
                                   datos[-subconjunto,ncol(datos)],fp,fn)
@@ -411,12 +412,26 @@ En la siguiente tabla se muestran, para los distintos tipos de ajuste y datos, l
 |                     | $E_{test}$       | Tamaño   | $E_{test}$          | Tamaño   | $E_{test}$           | Tamaño   |
 | Ajustes lm          | 7.226562         | 33       | 7.291667            | 31       | 7.942708             | 22       |
 | Ajustes glm         | 6.184896         | 23       | 6.445312            | 31       | 6.510417             | 22       |
-| Ajustes lm sin PCA  | 6.705729         | 28       | 6.901042            | 34       | 6.966146             | 26       |
-| Ajustes glm sin PCA | 6.25             | 31       | 6.315104            | 34       | 6.510417             | 26       |
+| Ajustes lm sin PCA  | 6.705729         | 28       | 6.705729            | 39       | 6.966146             | 26       |
+| Ajustes glm sin PCA | 5.989583         | 56       | 6.315104            | 34       | 6.510417             | 26       |
 
-A la vista de estos resultados parece razonable elegir los modelos que dan el menor error en la partición de test. Sin embargo, en algunos casos como en el ajuste de regresión lineal con PCA, en el que la diferencia entre el error mínimo y el sugerido por el estimador $C_p$ no es muy significativa, podemos preferir este segundo modelo ya que su dimensionalidad es menor. 
+En la tabla podemos observar una diferencia de calidad entre el modelo de regresión logística sin PCA de 56 características y los demás. Esto podría conducirnos a elegirlo sin más como nuestro modelo definitivo, ya que en general parece razonable escoger el modelo que da el menor error en la partición de test. Sin embargo, en algunos casos podemos preferir un modelo con un error ligeramente superior a cambio de una reducción sustancial de dimensionalidad. Por ello, vamos a representar las cuatro gráficas anteriores conjuntamente para ver mejor si existe una alternativa de este tipo:
 
-Aunque estos números parecen indicarnos el modelo a elegir, antes de decidirnos por uno de ellos vamos a realizar sobre los 4 mejores otro tipo de análisis, el basado en la curva _ROC_ (_Receiver Operating Characteristic_); esta curva representa la tasa de verdaderos positivos frente a la tasa de falsos positivos, y el área bajo ella nos dará una medida de lo acertado de las predicciones de un modelo.
+\vspace{1cm}
+```{r,echo=FALSE}
+plot(x=10:ncol(ajustes_lm),y=ajustes_lm[2,-(1:9)],type="o",pch=20,xlim=c(10,57),ylim=c(5,10),col="blue",xlab="Tamaño del conjunto",ylab="Error porcentual", main = "Comparativa")
+points(x=10:ncol(ajustes_glm),y=ajustes_glm[2,-(1:9)],type="o",pch=20,col="red")
+points(x=10:ncol(ajustes_lm_sin_pca),y=ajustes_lm_sin_pca[2,-(1:9)],type="o",pch=20,col="green")
+points(x=10:ncol(ajustes_glm_sin_pca),y=ajustes_glm_sin_pca[2,-(1:9)],type="o",pch=20,col="orange")
+legend(36.5,10,c("R. Lineal","R. Logística", "R. Lineal sin PCA", "R. Logística sin PCA"),lty=c(1,1),lwd=c(2.5,2.5),col=c("blue","red","green","orange"))
+```
+\vspace{1cm}
+
+Visualmente podemos deducir lo que un análisis más detallado de los números nos diría: asumiendo un pequeño aumento de $E_{test}$ (6.12 frente a 5.98), podríamos quedarnos con un modelo de regresión logística sin PCA con hasta 16 características menos; otras alternativas serían un $E_{test}$ de 6.05 con 2 características menos o un $E_{test}$ de 6.18 con 33 características menos con regresión logística usando PCA.
+
+Adicionalmente, antes de considerar cuál de los cuatro modelos anteriores vamos a escoger, sería interesante recordar el ajuste con regularización que hemos mencionado en la sección anterior para saber si nos puede aportar algo nuevo. El porcentaje de error que presenta es de un 6.57 \%, insuficiente en comparación con los otros modelos. Esto es debido a que, como ya habíamos adelantado, la poca complejidad de nuestras funciones reduce la utilidad de esta técnica; por ello, tomamos la decisión de descartar la regularización.
+
+Por último, vamos a realizar sobre los cuatro modelos otro tipo de análisis, el basado en la curva _ROC_ (_Receiver Operating Characteristic_); esta curva representa la tasa de verdaderos positivos frente a la tasa de falsos positivos, y el área bajo ella nos dará una medida de lo acertado de las predicciones de un modelo.
 
 En \texttt{R} podemos trabajar con curvas _ROC_ usando el paquete \texttt{ROCR}. Vamos a ver una función que a partir de unas predicciones y unas etiquetas reales nos devuelve el valor de área y la curva lista para ser representada con \texttt{plot}:
 
@@ -428,3 +443,30 @@ calcula_curva_roc = function(pred,truth){
     list(curva=curva,area=area)
 }
 ```
+
+Las cuatro curvas _ROC_ generadas quedan de la siguiente manera:
+
+\vspace{1cm}
+```{r,echo=FALSE}
+roc_glm_min_err = calcula_curva_roc(evaluar_regresion(ajustes_glm[3,glm_min_error_index],spam_procesado[-indices_train,-ncol(spam_procesado)]),spam_procesado[-indices_train,ncol(spam_procesado)])
+roc_glm_sin_pca_min_err = calcula_curva_roc(evaluar_regresion(ajustes_glm_sin_pca[3,glm_min_error_index],spam_procesado_sin_pca[-indices_train,-ncol(spam_procesado_sin_pca)]),spam_procesado_sin_pca[-indices_train,ncol(spam_procesado_sin_pca)])
+roc_glm_sin_pca_40 = calcula_curva_roc(evaluar_regresion(ajustes_glm_sin_pca[3,40],spam_procesado_sin_pca[-indices_train,-ncol(spam_procesado_sin_pca)]),spam_procesado_sin_pca[-indices_train,ncol(spam_procesado_sin_pca)])
+roc_glm_sin_pca_54 = calcula_curva_roc(evaluar_regresion(ajustes_glm_sin_pca[3,54],spam_procesado_sin_pca[-indices_train,-ncol(spam_procesado_sin_pca)]),spam_procesado_sin_pca[-indices_train,ncol(spam_procesado_sin_pca)])
+
+par(mfrow=c(2,2))
+par(pty="s")
+plot(roc_glm_min_err$curva,main="R. Logística, 23 variables, PCA",col="blue",lwd=1.5)
+plot(roc_glm_sin_pca_min_err$curva,main="R. Logística, 56 variables, sin PCA",col="blue",lwd=1.5)
+plot(roc_glm_sin_pca_40$curva,main="R. Logística, 40 variables, sin PCA",col="blue",lwd=1.5)
+plot(roc_glm_sin_pca_54$curva,main="R. Logística, 54 variables, sin PCA",col="blue",lwd=1.5)
+par(pty="m")
+par(mfrow=c(1,1))
+```
+
+En las gráficas anteriores se puede observar una gran similitud, por otra parte esperada, entre los cuatro modelos. Ya que no podemos distinguir de esta forma cuál es el mejor según este criterio, vamos a obtener el área bajo las curvas (_AUC_) para trabajar con una medida objetiva.
+
+|     | 23 variables, PCA | 40 variables sin PCA | 54 variables sin PCA | 56 variables sin PCA |
+|:---:|:-----------------:|:--------------------:|:--------------------:|:--------------------:|
+| AUC |     0.9458017     |       0.9807312      |       0.9819779      |       0.9771073      |
+
+Basándonos tanto en las tasas de error $E_{test}$ como en las áreas bajo las curvas _ROC_, hemos decidido que el modelo de regresión logística sin análisis de componentes principales utilizando 40 predictores presenta el balance más razonable entre dimensionalidad y precisión.

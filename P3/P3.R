@@ -150,32 +150,35 @@ sp_min_cp_index = which.min(seleccion_caracteristicas_sin_pca$cp)
 sp_min_bic_index = which.min(seleccion_caracteristicas_sin_pca$bic)
 
 lm_min_error_index = which.min(unlist(ajustes_lm[2,]))
-plot(x=1:ncol(ajustes_lm),y=ajustes_lm[2,],pch=20,ylim=c(6,13),col="blue",xlab="Tamaño del conjunto",ylab="Error porcentual", main = "Regresión lineal con PCA")
-lines(x=1:ncol(ajustes_lm),y=ajustes_lm[2,],pch=20,col="blue")
+plot(x=1:ncol(ajustes_lm),y=ajustes_lm[2,],pch=20,ylim=c(6,13),type="o",col="blue",xlab="Tamaño del conjunto",ylab="Error porcentual", main = "Regresión lineal con PCA")
 points(x=lm_min_error_index, y=ajustes_lm[2,lm_min_error_index], pch=10, col="red")
 points(x=min_cp_index, y=ajustes_lm[2,min_cp_index], pch=10, col="green")
 points(x=min_bic_index, y=ajustes_lm[2,min_bic_index], pch=10, col="orange")
 
 glm_min_error_index = which.min(unlist(ajustes_glm[2,]))
-plot(x=1:ncol(ajustes_glm),y=ajustes_glm[2,],pch=20,ylim=c(6,13),col="blue",xlab="Tamaño del conjunto",ylab="Error porcentual", main = "Regresión logística con PCA")
-lines(x=1:ncol(ajustes_glm),y=ajustes_glm[2,],pch=20,col="blue")
+plot(x=1:ncol(ajustes_glm),y=ajustes_glm[2,],pch=20,ylim=c(6,13),type="o",col="blue",xlab="Tamaño del conjunto",ylab="Error porcentual", main = "Regresión logística con PCA")
 points(x=glm_min_error_index, y=ajustes_glm[2,glm_min_error_index], pch=10, col="red")
 points(x=min_cp_index, y=ajustes_glm[2,min_cp_index], pch=10, col="green")
 points(x=min_bic_index, y=ajustes_glm[2,min_bic_index], pch=10, col="orange")
 
 lm_sp_min_error_index = which.min(unlist(ajustes_lm_sin_pca[2,]))
-plot(x=1:ncol(ajustes_lm_sin_pca),y=ajustes_lm_sin_pca[2,],pch=20,ylim=c(6,21),col="blue",xlab="Tamaño del conjunto",ylab="Error porcentual", main = "Regresión lineal sin PCA")
-lines(x=1:ncol(ajustes_lm_sin_pca),y=ajustes_lm_sin_pca[2,],pch=20,col="blue")
+plot(x=1:ncol(ajustes_lm_sin_pca),y=ajustes_lm_sin_pca[2,],pch=20,ylim=c(6,21),type="o",col="blue",xlab="Tamaño del conjunto",ylab="Error porcentual", main = "Regresión lineal sin PCA")
 points(x=lm_sp_min_error_index, y=ajustes_lm_sin_pca[2,lm_sp_min_error_index], pch=10, col="red")
 points(x=sp_min_cp_index, y=ajustes_lm_sin_pca[2,sp_min_cp_index], pch=10, col="green")
 points(x=sp_min_bic_index, y=ajustes_lm_sin_pca[2,sp_min_bic_index], pch=10, col="orange")
 
 glm_sp_min_error_index = which.min(unlist(ajustes_glm_sin_pca[2,]))
-plot(x=1:ncol(ajustes_glm_sin_pca),y=ajustes_glm_sin_pca[2,],pch=20,ylim=c(6,21),col="blue",xlab="Tamaño del conjunto",ylab="Error porcentual", main = "Regresión logística sin PCA")
-lines(x=1:ncol(ajustes_glm_sin_pca),y=ajustes_glm_sin_pca[2,],pch=20,col="blue")
+plot(x=1:ncol(ajustes_glm_sin_pca),y=ajustes_glm_sin_pca[2,],pch=20,ylim=c(6,21),type="o",col="blue",xlab="Tamaño del conjunto",ylab="Error porcentual", main = "Regresión logística sin PCA")
 points(x=glm_sp_min_error_index, y=ajustes_glm_sin_pca[2,glm_sp_min_error_index], pch=10, col="red")
 points(x=sp_min_cp_index, y=ajustes_glm_sin_pca[2,sp_min_cp_index], pch=10, col="green")
 points(x=sp_min_bic_index, y=ajustes_glm_sin_pca[2,sp_min_bic_index], pch=10, col="orange")
+
+# Comparativa de evolución de errores en los 4 tipos de modelos
+plot(x=10:ncol(ajustes_lm),y=ajustes_lm[2,-(1:9)],type="o",pch=20,xlim=c(10,57),ylim=c(5,10),col="blue",xlab="Tamaño del conjunto",ylab="Error porcentual", main = "Comparativa")
+points(x=10:ncol(ajustes_glm),y=ajustes_glm[2,-(1:9)],type="o",pch=20,col="red")
+points(x=10:ncol(ajustes_lm_sin_pca),y=ajustes_lm_sin_pca[2,-(1:9)],type="o",pch=20,col="green")
+points(x=10:ncol(ajustes_glm_sin_pca),y=ajustes_glm_sin_pca[2,-(1:9)],type="o",pch=20,col="orange")
+legend(36.5,10,c("R. Lineal","R. Logística", "R. Lineal sin PCA", "R. Logística sin PCA"),lty=c(1,1),lwd=c(2.5,2.5),col=c("blue","red","green","orange"))
 
 # Creamos la matriz de datos en el formato que necesita glmnet
 x = model.matrix(etiquetas~.,spam_procesado_sin_pca)[,-ncol(spam_procesado_sin_pca)]
@@ -203,14 +206,23 @@ calcula_curva_roc = function(pred,truth){
     list(curva=curva,area=area)
 }
 
-# Calculamos curvas ROC para los 4 mejores modelos (regresiones logísticas)
+# Calculamos curvas ROC para los 4 mejores modelos (regresiones logísticas, 3 de ellas sin PCA)
 
 roc_glm_min_err = calcula_curva_roc(evaluar_regresion(ajustes_glm[3,glm_min_error_index],spam_procesado[-indices_train,-ncol(spam_procesado)]),spam_procesado[-indices_train,ncol(spam_procesado)])
 roc_glm_sin_pca_min_err = calcula_curva_roc(evaluar_regresion(ajustes_glm_sin_pca[3,glm_min_error_index],spam_procesado_sin_pca[-indices_train,-ncol(spam_procesado_sin_pca)]),spam_procesado_sin_pca[-indices_train,ncol(spam_procesado_sin_pca)])
+roc_glm_sin_pca_40 = calcula_curva_roc(evaluar_regresion(ajustes_glm_sin_pca[3,40],spam_procesado_sin_pca[-indices_train,-ncol(spam_procesado_sin_pca)]),spam_procesado_sin_pca[-indices_train,ncol(spam_procesado_sin_pca)])
+roc_glm_sin_pca_54 = calcula_curva_roc(evaluar_regresion(ajustes_glm_sin_pca[3,54],spam_procesado_sin_pca[-indices_train,-ncol(spam_procesado_sin_pca)]),spam_procesado_sin_pca[-indices_train,ncol(spam_procesado_sin_pca)])
 
-roc = calcula_curva_roc(prediccion_test,spam_procesado[-indices_train,ncol(spam_procesado)])
+auc_min = roc_glm_min_err$area@y.values
+auc_sin_pca_min = roc_glm_sin_pca_min_err$area@y.values
+auc_sin_pca_40 = roc_glm_sin_pca_40$area@y.values
+auc_sin_pca_54 = roc_glm_sin_pca_54$area@y.values
 
-curva = roc$curva
-area = roc$area
-plot(curva)
-lines(unlist(curva@x.values),unlist(curva@y.values),col="red")
+par(mfrow=c(2,2))
+par(pty="s")
+plot(roc_glm_min_err$curva,main="R. Logística, 23 variables, PCA",col="blue",lwd=1.5)
+plot(roc_glm_sin_pca_min_err$curva,main="R. Logística, 56 variables, sin PCA",col="blue",lwd=1.5)
+plot(roc_glm_sin_pca_40$curva,main="R. Logística, 40 variables, sin PCA",col="blue",lwd=1.5)
+plot(roc_glm_sin_pca_54$curva,main="R. Logística, 54 variables, sin PCA",col="blue",lwd=1.5)
+par(pty="m")
+par(mfrow=c(1,1))
