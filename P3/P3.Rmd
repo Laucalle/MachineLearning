@@ -429,7 +429,7 @@ legend(36.5,10,c("R. Lineal","R. Logística", "R. Lineal sin PCA", "R. Logístic
 
 Visualmente podemos deducir lo que un análisis más detallado de los números nos diría: asumiendo un pequeño aumento de $E_{test}$ (6.12 frente a 5.98), podríamos quedarnos con un modelo de regresión logística sin PCA con hasta 16 características menos; otras alternativas serían un $E_{test}$ de 6.05 con 2 características menos o un $E_{test}$ de 6.18 con 33 características menos con regresión logística usando PCA.
 
-Adicionalmente, antes de considerar cuál de los cuatro modelos anteriores vamos a escoger, sería interesante recordar el ajuste con regularización que hemos mencionado en la sección anterior para saber si nos puede aportar algo nuevo. El porcentaje de error que presenta es de un 6.57 \%, insuficiente en comparación con los otros modelos. Esto es debido a que, como ya habíamos adelantado, la poca complejidad de nuestras funciones reduce la utilidad de esta técnica; por ello, tomamos la decisión de descartar la regularización.
+Adicionalmente, antes de considerar cuál de los cuatro modelos anteriores vamos a escoger, sería interesante recordar el ajuste con regularización y las transformaciones no lineales que hemos mencionado en secciones anteriores para saber si nos pueden aportar algo nuevo. En el caso de la regularización, el porcentaje de error que presenta es de un 6.57 \%, pobre en comparación con los otros modelos. Esto es debido a que, como ya habíamos adelantado, la poca complejidad de nuestras funciones reduce la utilidad de esta técnica; por ello, tomamos la decisión de descartar la regularización. Del mismo modo, teniendo en cuenta el bajo error de los modelos ya estudiados, no merece la pena aumentar en vano la complejidad de la clase de funciones, por lo que no se aplicarán transformaciones no lineales.
 
 Por último, vamos a realizar sobre los cuatro modelos otro tipo de análisis, el basado en la curva _ROC_ (_Receiver Operating Characteristic_); esta curva representa la tasa de verdaderos positivos frente a la tasa de falsos positivos, y el área bajo ella nos dará una medida de lo acertado de las predicciones de un modelo.
 
@@ -469,4 +469,50 @@ En las gráficas anteriores se puede observar una gran similitud, por otra parte
 |:---:|:-----------------:|:--------------------:|:--------------------:|:--------------------:|
 | AUC |     0.9458017     |       0.9807312      |       0.9819779      |       0.9771073      |
 
-Basándonos tanto en las tasas de error $E_{test}$ como en las áreas bajo las curvas _ROC_, hemos decidido que el modelo de regresión logística sin análisis de componentes principales utilizando 40 predictores presenta el balance más razonable entre dimensionalidad y precisión.
+Basándonos tanto en las tasas de error $E_{test}$ como en las áreas bajo las curvas _ROC_, hemos decidido que el modelo de regresión logística con análisis de componentes principales utilizando 23 predictores presenta el balance más razonable entre dimensionalidad y precisión.
+
+\newpage
+
+### Descripción del modelo seleccionado.
+
+En primer lugar, vamos a ver el error dentro de la muestra que presenta nuestro modelo. Esto se calcula mediante el siguiente código:
+
+```{r}
+mejor_reg = ajustes_glm[3,23]
+etiquetas_train = evaluar_regresion(mejor_reg,spam_procesado[indices_train,-ncol(spam_procesado)])
+error_mejor_reg = porcentaje_error(categorizar(unlist(etiquetas_train)),
+                                   spam_procesado[indices_train,ncol(spam_procesado)])
+```
+
+El error $E_{in}$ obtenido es de 6.39478 \%, muy similar a $E_{test}$, lo que nos indica que el modelo generaliza correctamente.
+
+Es el momento asimismo de estimar $E_{out}$. Con este propósito utilizaremos la cota basada en la desigualdad de _Hoeffding_:
+
+$$\mathbb{P}[|E_{test}(g) - E_{out}(g)| > \epsilon] \leq 2e^{-2N\epsilon^2}$$
+
+Donde $N$ es el número de observaciones de la partición de test y $\mathbb{P}[|E_{test}(g) - E_{out}(g)| > \epsilon]$ corresponde a una tolerancia $\delta$ que fijaremos a 0.05.
+
+$$\delta \leq 2e^{-2N\epsilon^2}$$
+
+Junto con el error en la partición de test obtendremos, despejando $\epsilon$ de la siguiente forma, un intervalo en el que se encuentra $E_{out}$ con una tolerancia $\delta =$ 0.05.
+
+$$ \sqrt{\frac{log(2)-log(\delta)}{2N}} \geq \epsilon$$
+
+Esta desigualdad nos da un valor de $\epsilon =$ 0.0346 y, por tanto, un intervalo para $E_{out}$ de 6.1848 $\pm$ 0.0346 = [6.1502, 6.2194].
+
+El modelo obtenido emplea las siguientes variables con sus pesos asociados:
+
+| Variables| Pesos         | Variables   | Pesos         |
+|:--------:|:-------------:|:-----------:|:-------------:|
+| PC1      | -1.59929266   | PC18        | -0.24185342   |
+| PC2      | -0.43305137   | PC22        | 0.26230726    |
+| PC3      | 0.78132498    | PC23        | 0.20279272    |
+| PC4      | 0.69798947    | PC24        | 0.14152461    |
+| PC5      | -0.67353870   | PC26        | 0.33330240    |
+| PC6      | 0.31172429    | PC27        | -0.39325017   |
+| PC7      | 0.38812438    | PC28        | 0.60798142    |
+| PC11     | -0.63229755   | PC31        | 0.35697994    |
+| PC12     | 0.33770499    | PC32        | 0.15659858    |
+| PC13     | -0.29214977   | PC33        | -0.26189766   |
+| PC16     | 0.13648889    | PC34        | -0.03502565   |
+| PC17     | 0.14671441    | Intercept   | -1.36529004   |

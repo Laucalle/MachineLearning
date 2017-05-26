@@ -226,3 +226,9 @@ plot(roc_glm_sin_pca_40$curva,main="R. Logística, 40 variables, sin PCA",col="b
 plot(roc_glm_sin_pca_54$curva,main="R. Logística, 54 variables, sin PCA",col="blue",lwd=1.5)
 par(pty="m")
 par(mfrow=c(1,1))
+
+# Calculamos E_in del modelo elegido (regresión logística con PCA y 23 predictores)
+
+mejor_reg = ajustes_glm[3,23]
+etiquetas_train = evaluar_regresion(mejor_reg,spam_procesado[indices_train,-ncol(spam_procesado)])
+error_mejor_reg = porcentaje_error(categorizar(unlist(etiquetas_train)),spam_procesado[indices_train,ncol(spam_procesado)])
