@@ -516,3 +516,62 @@ El modelo obtenido emplea las siguientes variables con sus pesos asociados:
 | PC13     | -0.29214977   | PC33        | -0.26189766   |
 | PC16     | 0.13648889    | PC34        | -0.03502565   |
 | PC17     | 0.14671441    | Intercept   | -1.36529004   |
+
+\newpage
+
+# Regresión.
+
+Para el caso de regresión utilizaremos la base de datos de _Los Angeles ozone_, cuyas observaciones están compuestas por las siguientes características:
+
+\begin{itemize}
+
+    \item
+    Altura geopotencial sobre la base aérea de Vandenberg para una presión de 500 milibares.
+    \item
+    Velocidad del viento en millas por hora.
+    \item
+    Porcentaje de humedad.
+    \item
+    Temperatura en la base aérea de Sandburg.
+    \item
+    Altura base de inversión térmica.
+    \item
+    Gradiente barométrico desde el aeropuerto internacional de Los Ángeles hasta Daggett.
+    \item
+    Temperatura base de inversión térmica.
+    \item
+    Visibilidad (en millas).
+    \item
+    Día del año.
+    \item
+    Variable de respuesta: concentración horaria media de ozono atmosférico en Upland, California.
+
+\end{itemize}
+
+Esta base de datos no contiene valores perdidos; tampoco se nos provee de particiones prefijadas de entrenamiento y test, por lo que dividiremos la muestra en dos subconjuntos elegidos aleatoriamente (aunque con una semilla inicializada a un valor concreto) con una proporción 70\%-30\% respectivamente.
+
+## Preprocesamiento de datos.
+
+Siguiendo los mismos razonamientos que en la sección dedicada a clasificación, emplearemos también transformaciones de _Yeo-Johnson_, centrado, escalado y análisis de componentes principales; en el caso de este último, volveremos a analizar la diferencia entre aplicarlo y no aplicarlo mediante dos conjuntos de datos preprocesados.
+
+Debido al número de características de este _dataset_, bastante pequeño en comparación con el empleado en clasificación, es de esperar que la reducción de dimensionalidad no sea tan drástica. Otra consecuencia de esto es que el riesgo de eliminar predictores relevantes es mayor.
+
+## Clases de funciones a utilizar.
+
+De nuevo, teniendo en cuenta que esta práctica trata de ajustes de modelos lineales, las clases de funciones que emplearemos serán los polinomios de grado 1.
+
+Si observamos indicios de no linealidad en las gráficas de errores residuales nos plantearemos hacer transformaciones no lineales, principalmente con la función \texttt{poly}.
+
+## Regularización.
+
+Al igual que en clasificación, aparentemente no es necesaria esta técnica; no obstante, si decidiésemos aplicar transformaciones no lineales para poder trabajar con modelos más complejos, sería interesante estudiar lo que la regularización nos puede aportar (en particular, _weight decay_).
+
+## Selección y análisis de modelos.
+
+Sobre los datos procesados ejecutaremos \texttt{regsubsets} para obtener subconjuntos de características de la misma forma que en el experimento anterior. Ya que en esta ocasión disponemos de pocos predictores, podremos aplicar un método de selección exhaustivo. La función de \texttt{R} para automatizar el proceso de obtención de fórmulas será la misma que habíamos definido (\texttt{subconjuntos\_formulas}).
+
+Dada la naturaleza de este problema, no podemos usar regresión logística, por lo que nos limitaremos a la función \texttt{lm}, que ofrece regresiones lineales gaussianas.
+
+Una vez aclarados estos detalles, vamos a pasar a seleccionar un conjunto de modelos candidatos; para medir su eficacia utilizaremos el error cuadrático medio (_MSE_):
+
+$$MSE=\frac{1}{N} \sum^N_{i=1} (\hat{y}-y)^2$$

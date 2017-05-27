@@ -63,8 +63,8 @@ o_indexes_train = sample(nrow(ozono$datos),round(0.7*nrow(ozono$datos)))
 o_labels = ozono$etiquetas
 
 # Preprocesar con y sin PCA
-o_procesados = preprocesar_datos(ozono$datos,o_indexes_train,c("YeoJohnson","center","scale","pca"),0.85)
-o_procesados_sin_pca = preprocesar_datos(ozono$datos,o_indexes_train,c("YeoJohnson","center","scale"),0.85)
+o_procesados = preprocesar_datos(ozono$datos,o_indexes_train,c("YeoJohnson","center","scale","pca"),0.9)
+o_procesados_sin_pca = preprocesar_datos(ozono$datos,o_indexes_train,c("YeoJohnson","center","scale"),0.9)
 o_procesados = as.data.frame(poly(x=as.matrix(o_procesados[,-ncol(o_procesados)]),degree=2))
 o_procesados_sin_pca = as.data.frame(poly(x=as.matrix(o_procesados_sin_pca[,-ncol(o_procesados_sin_pca)]),degree=2))
 
