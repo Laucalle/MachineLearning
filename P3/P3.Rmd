@@ -742,7 +742,7 @@ legend(x="top",ncol=2,26,c("Con transformaciones","Sin transformaciones"),lty=c(
 
 \newpage
 
-Es evidente que hemos logrado mejorar el ajuste añadiendo polinomios de orden dos a nuestros conjuntos de predictores. Como consecuencia de esto, las gráficas de errores residuales se deberían ver un poco diferentes:
+Es evidente que hemos logrado mejorar el ajuste añadiendo polinomios de orden dos a nuestros conjuntos de predictores. Como consecuencia de esto, las gráficas de errores residuales de los mejores modelos (marcados en verde en las gráficas anteriores) se deberían ver un poco diferentes:
 
 \vspace{0.7cm}
 ```{r,echo=FALSE,fig.align='center',fig.height=3.6,fig.width=5.3}
@@ -807,3 +807,57 @@ plot(sqrt_mejor_modelo_sin_pca_poly$reg,which=1,pch=20,col="blue")
 
 \vspace{0.7cm}
 En términos de error cuadrático medio, esto se traduce en 13.7345 para el modelo con PCA y en 14.8126 para el modelo sin PCA. Hay que destacar la ligera mejora respecto a los modelos originales con heterocedasticidad; además, las estimaciones proporcionadas tras estas transformaciones deberían ser estadísticamente más fiables ya que una de las suposiciones del cálculo de regresiones lineales es que la varianza se mantiene uniforme en todo el conjunto de datos.
+
+Aun obteniendo una buena tasa de error, teniendo en cuenta que hemos utilizado polinomios de grado dos, vamos a probar la regularización para ver si nos ofrece algún beneficio. Emplearemos _weight decay_ con el mejor modelo calculado hasta el momento.
+
+Con este propósito reutilizaremos el código asociado de la sección de clasificación:
+
+```{r}
+# Creamos la matriz de datos en el formato que necesita glmnet
+o_x = model.matrix(mejor_formula_pca_poly$formula,o_procesados_poly)[,-ncol(o_procesados_poly)]
+o_y = o_procesados_poly$etiquetas
+# Obtenemos los errores de validación cruzada en el conjunto
+o_cv.out = cv.glmnet(o_x[o_indexes_train,],o_y[o_indexes_train],alpha=0)
+# Guardamos el lambda que ha dado menor error de validación cruzada
+o_bestlambda = o_cv.out$lambda.min
+# Obtenemos un modelo de regresión ridge
+o_modelo_ridge = glmnet(o_x,o_y,alpha=0,lambda=o_bestlambda)
+# Calculamos las predicciones y el error asociado a ellas
+o_modelo_ridge.pred = predict(o_modelo_ridge,s=o_bestlambda,newx=o_x[-o_indexes_train,]) 
+o_error_ridge =
+    error_cuadratico_medio(o_modelo_ridge.pred^2,
+                            o_procesados_poly[-o_indexes_train,ncol(o_procesados_poly)])
+```
+
+El error cuadrático medio es de 97.5945, así que podemos descartar la regularización en nuestra búsqueda del mejor modelo final. Esto es, por otra parte, posiblemente debido a que ya habíamos determinado la complejidad más adecuada para ajustar los datos en base a los patrones detectados en los errores residuales. La regularización es apta para situaciones en las que la complejidad de la clase de funciones utilizada es excesiva, lo que puede provocar problemas de generalización por sobreajuste. No obstante, teniendo ya una clase de funciones suficientemente general, una simplificación de la misma produce una situación de _underfitting_ o infraajuste.
+
+## Descripción del modelo final.
+
+El modelo que vamos a elegir como definitivo es el derivado de realizar transformaciones no lineales polinómicas de grado dos a los datos (escalados, centrados y con PCA respecto al conjunto de entrenamiento de este problema) y de raíz cuadrada a las etiquetas; para hacer nuevas predicciones sería necesario aplicar las mismas transformaciones. Recordemos que este modelo hace uso de 17 predictores para obtener un error medio cuadrático (_MSE_) de 13.7345, que significa que en promedio nos equivocamos en 3.7 puntos en la escala de la variable de respuesta.
+
+Respecto al error dentro de la muestra, $E_{in}$, obtenemos un valor de 13.4503, lo que pone de manifiesto que el conjunto de entrenamiento es suficientemente representativo de la población. Lo hemos obtenido mediante el siguiente código:
+
+```{r}
+o_etiquetas_train = evaluar_regresion(sqrt_mejor_modelo_poly$reg,
+                        o_procesados_poly[o_indexes_train,-ncol(o_procesados_poly)])
+o_error_mejor_reg = error_cuadratico_medio(unlist(o_etiquetas_train)^2,
+                                           o_labels[o_indexes_train])
+```
+
+Una cota para $E_{out}$ es la basada en $E_{test}$. Procediendo equivalentemente a la sección de clasificación, definimos esta cota gracias a la desigualdad de _Hoeffding_.
+
+Dicha desigualdad nos da un valor de $\epsilon =$ 0.1364 y, consecuentemente, un intervalo para $E_{out}$ de 13.7345 $\pm$ 0.1364 = [13.598, 13.8709].
+
+A continuación se muestran los pesos asociados a los predictores que caracterizan el modelo elegido:
+
+| Característica |    Peso   | Característica |    Peso    |
+|:--------------:|:---------:|:--------------:|:----------:|
+|       $PC1$    |  94.06544 | $PC1\cdot PC4$ |  241.89806 |
+|      $PC1^2$   |  14.74783 | $PC3\cdot PC4$ | -348.44470 |
+|       $PC2$    |  24.50623 |     $PC4^2$    |  -15.64003 |
+| $PC1\cdot PC2$ | 542.79954 | $PC1\cdot PC5$ |  224.02592 |
+|      $PC2^2$   | -21.53054 | $PC2\cdot PC5$ | -185.91827 |
+|       $PC3$    |  25.39582 | $PC2\cdot PC6$ |  200.61627 |
+| $PC1\cdot PC3$ | 447.12311 | $PC3\cdot PC6$ |  165.04666 |
+|      $PC3^2$   | -35.49378 |    $PC6^2$     |  -16.43187 |
+|       $PC4$    |  15.25194 |    Intercept   |   11.67902 |

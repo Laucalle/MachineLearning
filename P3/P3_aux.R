@@ -169,3 +169,28 @@ error_sqrt_mejor_modelo_sin_pca_poly = error_cuadratico_medio(etiquetas_sqrt_mej
 # Representamos los errores residuales
 plot(sqrt_mejor_modelo_poly$reg,which=1,pch=20,col="blue")
 plot(sqrt_mejor_modelo_sin_pca_poly$reg,which=1,pch=20,col="blue")
+
+# Regularizamos el mejor modelo
+# Creamos la matriz de datos en el formato que necesita glmnet
+o_x = model.matrix(mejor_formula_pca_poly$formula,o_procesados_poly)[,-ncol(o_procesados_poly)]
+o_y = o_procesados_poly$etiquetas
+# Obtenemos los errores de validación cruzada en el conjunto
+o_cv.out = cv.glmnet(o_x[o_indexes_train,],o_y[o_indexes_train],alpha=0)
+plot(o_cv.out)
+# Guardamos el lambda que ha dado menor error de validación cruzada
+o_bestlambda = o_cv.out$lambda.min
+# Obtenemos un modelo de regresión ridge
+o_modelo_ridge = glmnet(o_x,o_y,alpha=0,lambda=o_bestlambda)
+# Calculamos las predicciones y el error asociado a ellas
+o_modelo_ridge.pred = predict(o_modelo_ridge,s=o_bestlambda,newx=o_x[-o_indexes_train,]) 
+o_error_ridge = error_cuadratico_medio(o_modelo_ridge.pred^2,o_procesados_poly[-o_indexes_train,ncol(o_procesados_poly)])
+
+# E_in
+o_etiquetas_train = evaluar_regresion(sqrt_mejor_modelo_poly$reg,o_procesados_poly[o_indexes_train,-ncol(o_procesados_poly)])
+o_error_mejor_reg = error_cuadratico_medio(unlist(o_etiquetas_train)^2,o_labels[o_indexes_train])
+
+
+# Cota de E_out basada en E_test
+delta = 0.05 # Tolerancia
+N = nrow(ozono$datos)-length(o_indexes_train) # N datos de test
+cota_test = calcular_cota_eout(N,delta) # E_test +/- esta cota * 100
