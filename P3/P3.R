@@ -1,31 +1,5 @@
 set.seed(3)
 
-clasificar_recta = function(punto, recta){
-    
-    sign(punto[2] - recta[1]*punto[1] - recta[2])
-    
-}
-
-error_cuadratico = function(clasificados,reales){
-    
-    squared_error = function(pair_h_y){ # (h(x) - y_n)^2
-        (pair_h_y[1]-pair_h_y[2])^2
-    }
-    
-    if(min(reales) == 0){
-        
-        reales[reales == 0] = -1
-        clasificados[clasificados < 0.5] = -1
-        clasificados[clasificados >= 0.5] = 1
-        
-    }
-    
-    pos_errores = which(clasificados != reales) # Qué etiquetas ha clasificado mal.
-    pares_errores = cbind(clasificados[pos_errores],reales[pos_errores],deparse.level=0)
-    # Sumamos los errores al cuadrado y hacemos la media.
-    sum(apply(pares_errores,1,squared_error))/length(clasificados)
-}
-
 porcentaje_error = function(clasificados,reales,fp=1,fn=1){
     
     reales[reales == 0] = -1
@@ -109,7 +83,7 @@ subconjuntos_formulas = function(datos,max_tam,metodo="exhaustive"){
     list(formulas=formulas,cp=summary(subsets)$cp,bic=summary(subsets)$bic)
     
 }
-
+###############################################################################
 # Clasificación: Email Spam
 
 spam = leer_datos_spam()
@@ -185,7 +159,6 @@ x = model.matrix(etiquetas~.,spam_procesado_sin_pca)[,-ncol(spam_procesado_sin_p
 y = spam_procesado_sin_pca$etiquetas
 # Obtenemos los errores de validación cruzada en el conjunto
 cv.out = cv.glmnet(x[indices_train,],y[indices_train],alpha=0)
-plot(cv.out)
 # Guardamos el lambda que ha dado menor error de validación cruzada
 bestlambda = cv.out$lambda.min
 # Obtenemos un modelo de regresión ridge
@@ -232,3 +205,164 @@ par(mfrow=c(1,1))
 mejor_reg = ajustes_glm[3,23]
 etiquetas_train = evaluar_regresion(mejor_reg,spam_procesado[indices_train,-ncol(spam_procesado)])
 error_mejor_reg = porcentaje_error(categorizar(unlist(etiquetas_train)),spam_procesado[indices_train,ncol(spam_procesado)])
+
+###############################################################################
+#   Regresión: LA ozone
+
+set.seed(3)
+
+error_cuadratico_medio = function(clasificados,reales){
+    
+    mean((clasificados-reales)^2)
+    
+}
+
+leer_datos_ozono = function(){
+    
+    datos = read.table("./datos/LAozone.data",sep=",",head=T)
+    etiquetas = datos[,1]
+    list(datos=datos[,-1],etiquetas=etiquetas)
+    
+}
+
+# Evalúa una regresión lineal dada una fórmula y unos datos de entrenamiento 
+evalua_lm = function(formula,datos,subconjunto){
+    reg_lin = do.call("lm", list(formula=formula, data=substitute(datos), subset=substitute(subconjunto)))
+    prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
+    error = error_cuadratico_medio(prediccion_test,datos[-subconjunto,ncol(datos)])
+    list(formula=formula, error = error, reg = reg_lin)
+}
+
+ozono = leer_datos_ozono()
+o_indexes_train = sample(nrow(ozono$datos),round(0.7*nrow(ozono$datos)))
+o_labels = ozono$etiquetas
+
+# Preprocesar con y sin PCA
+o_procesados = preprocesar_datos(ozono$datos,o_indexes_train,c("YeoJohnson","center","scale","pca"),0.9)
+o_procesados_sin_pca = preprocesar_datos(ozono$datos,o_indexes_train,c("YeoJohnson","center","scale"),0.9)
+
+# Añadir las etiquetas para la regresión lineal
+o_procesados = cbind(o_procesados,ozono$etiquetas)
+o_procesados_sin_pca = cbind(o_procesados_sin_pca,ozono$etiquetas)
+colnames(o_procesados)[ncol(o_procesados)] = "etiquetas"
+colnames(o_procesados_sin_pca)[ncol(o_procesados_sin_pca)] = "etiquetas"
+
+# Tamaño máximo de los conjuntos de características de regsubsets
+o_max_caracteristicas = ncol(o_procesados)-1
+o_max_caracteristicas_sin_pca = ncol(o_procesados_sin_pca)-1
+
+# Calculamos los objetos fórmula para cada subconjunto de variables
+o_seleccion_caracteristicas = subconjuntos_formulas(o_procesados[o_indexes_train,],o_max_caracteristicas)
+o_formulas = o_seleccion_caracteristicas$formulas
+o_seleccion_caracteristicas_sin_pca = subconjuntos_formulas(o_procesados_sin_pca[o_indexes_train,],o_max_caracteristicas_sin_pca,metodo="forward")
+o_formulas_sin_pca = o_seleccion_caracteristicas_sin_pca$formulas
+
+# Obtenemos los resultados de evaluar todos los modelos
+ajustes = mapply(evalua_lm, o_formulas, MoreArgs = list(datos = o_procesados, subconjunto = o_indexes_train))
+ajustes_sin_pca = mapply(evalua_lm, o_formulas_sin_pca, MoreArgs = list(datos = o_procesados_sin_pca, subconjunto = o_indexes_train))
+
+# Gráficas de errores medios cuadráticos
+con_pca_min_error_index = which.min(unlist(ajustes[2,]))
+sin_pca_min_error_index = which.min(unlist(ajustes_sin_pca[2,]))
+plot(x=1:ncol(ajustes),y=ajustes[2,],pch=20,ylim=c(17,28),type="o",col="blue",xlab="Tamaño del conjunto",ylab="Error cuadrático", main = "Regresión lineal con PCA")
+points(x=con_pca_min_error_index, y=ajustes[2,con_pca_min_error_index], pch=10, col="red")
+plot(x=1:ncol(ajustes_sin_pca),y=ajustes_sin_pca[2,],pch=20,ylim=c(17,28),type="o",col="blue",xlab="Tamaño del conjunto",ylab="Error cuadrático", main = "Regresión lineal sin PCA")
+points(x=sin_pca_min_error_index, y=ajustes_sin_pca[2,sin_pca_min_error_index], pch=10, col="red")
+
+plot(ajustes[3,6]$reg,which=c(1),pch=20,col="blue")
+plot(ajustes_sin_pca[3,6]$reg,which=c(1),pch=20,col="blue")
+
+#   Aplicamos transformaciones no lineales a los mejores modelos
+# Ya que son pocas características, vamos a extraerlas manualmente
+mejor_formula_pca = ajustes[1,6]
+mejor_formula_sin_pca = ajustes_sin_pca[1,6]
+print(mejor_formula_pca) # PC1 + PC2 + PC3 + PC4 + PC5 + PC6
+print(mejor_formula_sin_pca) # humidity + temp + ibh + ibt + vis + doy
+
+# Aplicamos polinomios de grado 2
+o_procesados_poly = poly(as.matrix(o_procesados[,-ncol(o_procesados)]),degree=2)
+o_procesados_poly = cbind(as.data.frame(o_procesados_poly),o_labels)
+colnames(o_procesados_poly)[ncol(o_procesados_poly)] = "etiquetas"
+o_procesados_sin_pca_poly = poly(as.matrix(o_procesados_sin_pca[,c("humidity","temp","ibh","ibt","vis","doy")]),degree=2)
+o_procesados_sin_pca_poly = cbind(as.data.frame(o_procesados_sin_pca_poly),o_labels)
+colnames(o_procesados_sin_pca_poly)[ncol(o_procesados_sin_pca_poly)] = "etiquetas"
+
+# Calculamos los nuevos conjuntos de fórmulas a partir de las nuevas características
+max_car_poly = ncol(o_procesados_poly)-1
+max_car_sin_pca_poly = ncol(o_procesados_sin_pca_poly)-1
+formulas_poly = subconjuntos_formulas(o_procesados_poly,max_car_poly)$formulas
+formulas_sin_pca_poly = subconjuntos_formulas(o_procesados_sin_pca_poly,max_car_sin_pca_poly)$formulas
+
+# Ajustamos todos los modelos
+ajustes_poly = mapply(evalua_lm,formulas_poly, MoreArgs = list(datos = o_procesados_poly, subconjunto = o_indexes_train))
+ajustes_sin_pca_poly = mapply(evalua_lm,formulas_sin_pca_poly, MoreArgs = list(datos = o_procesados_sin_pca_poly, subconjunto = o_indexes_train))
+
+# Gráficas de errores medios cuadráticos
+con_pca_poly_min_error_index = which.min(unlist(ajustes_poly[2,]))
+sin_pca_poly_min_error_index = which.min(unlist(ajustes_sin_pca_poly[2,]))
+plot(x=1:ncol(ajustes_poly),y=ajustes_poly[2,],pch=20,ylim=c(14,26),type="o",col="blue",xlab="Tamaño del conjunto",ylab="Error cuadrático", main = "R. Lin. con PCA y poly")
+points(x=con_pca_poly_min_error_index, y=ajustes_poly[2,con_pca_poly_min_error_index], pch=10, col="red")
+plot(x=1:ncol(ajustes_sin_pca_poly),y=ajustes_sin_pca_poly[2,],pch=20,ylim=c(14,26),type="o",col="blue",xlab="Tamaño del conjunto",ylab="Error cuadrático", main = "R. Lin. sin PCA y con poly")
+points(x=sin_pca_poly_min_error_index, y=ajustes_sin_pca_poly[2,sin_pca_poly_min_error_index], pch=10, col="red")
+
+# Comparativa de errores cuadráticos previos y actuales
+layout(matrix(c(1,2,3,3),ncol=2,byrow=T))
+
+par(mai=rep(0.5,4))
+plot(x=1:ncol(ajustes_poly),y=ajustes_poly[2,],pch=20,xlim=c(1,27),ylim=c(14,26),type="o",col="blue",xlab="Tamaño del conjunto",ylab="Error cuadrático", main = "R. Lin. con PCA")
+points(x=con_pca_poly_min_error_index, y=ajustes_poly[2,con_pca_poly_min_error_index], pch=10, col="green")
+points(x=1:ncol(ajustes),y=ajustes[2,],type="o",pch=20,col="red")
+plot(x=1:ncol(ajustes_sin_pca_poly),y=ajustes_sin_pca_poly[2,],pch=20,ylim=c(14,26),type="o",col="blue",xlab="Tamaño del conjunto",ylab="Error cuadrático", main = "R. Lin. sin PCA")
+points(x=sin_pca_poly_min_error_index, y=ajustes_sin_pca_poly[2,sin_pca_poly_min_error_index], pch=10, col="green")
+points(x=1:ncol(ajustes_sin_pca),y=ajustes_sin_pca[2,],type="o",pch=20,col="red")
+par(mai=c(0,0,0,0))
+plot.new()
+legend(x="top",ncol=2,26,c("Con transformaciones","Sin transformaciones"),lty=c(1,1),lwd=c(2.5,2.5),col=c("blue","red"))
+
+# Gráficas de errores residuales
+par(dev.off())
+layout(matrix(c(1,1)))
+plot(ajustes_poly[3,con_pca_poly_min_error_index]$reg,which=c(1),pch=20,col="blue")
+plot(ajustes_sin_pca_poly[3,sin_pca_poly_min_error_index]$reg,which=c(1),pch=20,col="blue")
+
+#   Aplicamos raíz cuadrada a las etiquetas para solucionar la heterocedasticidad y recalculamos el error
+o_procesados_poly[,ncol(o_procesados_poly)] = sqrt(o_procesados_poly[,ncol(o_procesados_poly)])
+o_procesados_sin_pca_poly[,ncol(o_procesados_sin_pca_poly)] = sqrt(o_procesados_sin_pca_poly[,ncol(o_procesados_sin_pca_poly)])
+mejor_formula_pca_poly = ajustes_poly[1,17]
+mejor_formula_sin_pca_poly = ajustes_sin_pca_poly[1,16]
+
+# Obtenemos los dos mejores modelos pero con etiquetas de raíz cuadrada
+sqrt_mejor_modelo_poly = evalua_lm(mejor_formula_pca_poly,o_procesados_poly,o_indexes_train)
+sqrt_mejor_modelo_sin_pca_poly = evalua_lm(mejor_formula_sin_pca_poly,o_procesados_sin_pca_poly,o_indexes_train)
+etiquetas_sqrt_mejor_modelo_poly = evaluar_regresion(sqrt_mejor_modelo_poly$reg,o_procesados_poly[-o_indexes_train,-ncol(o_procesados_poly)])
+etiquetas_sqrt_mejor_modelo_sin_pca_poly = evaluar_regresion(sqrt_mejor_modelo_sin_pca_poly$reg,o_procesados_sin_pca_poly[-o_indexes_train,-ncol(o_procesados_sin_pca_poly)])
+# Calculamos MSE
+error_sqrt_mejor_modelo_poly = error_cuadratico_medio(etiquetas_sqrt_mejor_modelo_poly^2,o_labels[-o_indexes_train])
+error_sqrt_mejor_modelo_sin_pca_poly = error_cuadratico_medio(etiquetas_sqrt_mejor_modelo_sin_pca_poly^2,o_labels[-o_indexes_train])
+# Representamos los errores residuales
+plot(sqrt_mejor_modelo_poly$reg,which=1,pch=20,col="blue")
+plot(sqrt_mejor_modelo_sin_pca_poly$reg,which=1,pch=20,col="blue")
+
+# Regularizamos el mejor modelo
+# Creamos la matriz de datos en el formato que necesita glmnet
+o_x = model.matrix(mejor_formula_pca_poly$formula,o_procesados_poly)[,-ncol(o_procesados_poly)]
+o_y = o_procesados_poly$etiquetas
+# Obtenemos los errores de validación cruzada en el conjunto
+o_cv.out = cv.glmnet(o_x[o_indexes_train,],o_y[o_indexes_train],alpha=0)
+# Guardamos el lambda que ha dado menor error de validación cruzada
+o_bestlambda = o_cv.out$lambda.min
+# Obtenemos un modelo de regresión ridge
+o_modelo_ridge = glmnet(o_x,o_y,alpha=0,lambda=o_bestlambda)
+# Calculamos las predicciones y el error asociado a ellas
+o_modelo_ridge.pred = predict(o_modelo_ridge,s=o_bestlambda,newx=o_x[-o_indexes_train,]) 
+o_error_ridge = error_cuadratico_medio(o_modelo_ridge.pred^2,o_procesados_poly[-o_indexes_train,ncol(o_procesados_poly)])
+
+# E_in
+o_etiquetas_train = evaluar_regresion(sqrt_mejor_modelo_poly$reg,o_procesados_poly[o_indexes_train,-ncol(o_procesados_poly)])
+o_error_mejor_reg = error_cuadratico_medio(unlist(o_etiquetas_train)^2,o_labels[o_indexes_train])
+
+
+# Cota de E_out basada en E_test
+delta = 0.05 # Tolerancia
+N = nrow(ozono$datos)-length(o_indexes_train) # N datos de test
+cota_test = calcular_cota_eout(N,delta) # E_test +/- esta cota * 100
