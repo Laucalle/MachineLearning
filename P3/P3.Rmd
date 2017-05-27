@@ -360,7 +360,7 @@ porcentaje_error = function(clasificados,reales,fp=1,fn=1){
 Como hemos generado varios conjuntos de modelos utilizando las funciones \texttt{lm} y \texttt{glm}, podemos comenzar comparando y eligiendo un modelo que represente cada uno de estos conjuntos (el mejor de ellos). Las siguientes gráficas muestran los errores obtenidos con diferentes subconjuntos de predictores para los datos con y sin análisis de componentes principales:
 
 \vspace{1cm}
-```{r, echo=FALSE}
+```{r, echo=FALSE,fig.align='center'}
 par(mfrow=c(2,2))
 # Con PCA
 
@@ -418,7 +418,7 @@ En la siguiente tabla se muestran, para los distintos tipos de ajuste y datos, l
 En la tabla podemos observar una diferencia de calidad entre el modelo de regresión logística sin PCA de 56 características y los demás. Esto podría conducirnos a elegirlo sin más como nuestro modelo definitivo, ya que en general parece razonable escoger el modelo que da el menor error en la partición de test. Sin embargo, en algunos casos podemos preferir un modelo con un error ligeramente superior a cambio de una reducción sustancial de dimensionalidad. Por ello, vamos a representar las cuatro gráficas anteriores conjuntamente para ver mejor si existe una alternativa de este tipo:
 
 \vspace{1cm}
-```{r,echo=FALSE}
+```{r,echo=FALSE,fig.align='center'}
 plot(x=10:ncol(ajustes_lm),y=ajustes_lm[2,-(1:9)],type="o",pch=20,xlim=c(10,57),ylim=c(5,10),col="blue",xlab="Tamaño del conjunto",ylab="Error porcentual", main = "Comparativa")
 points(x=10:ncol(ajustes_glm),y=ajustes_glm[2,-(1:9)],type="o",pch=20,col="red")
 points(x=10:ncol(ajustes_lm_sin_pca),y=ajustes_lm_sin_pca[2,-(1:9)],type="o",pch=20,col="green")
@@ -433,7 +433,7 @@ Adicionalmente, antes de considerar cuál de los cuatro modelos anteriores vamos
 
 Por último, vamos a realizar sobre los cuatro modelos otro tipo de análisis, el basado en la curva _ROC_ (_Receiver Operating Characteristic_); esta curva representa la tasa de verdaderos positivos frente a la tasa de falsos positivos, y el área bajo ella nos dará una medida de lo acertado de las predicciones de un modelo.
 
-En \texttt{R} podemos trabajar con curvas _ROC_ usando el paquete \texttt{ROCR}. Vamos a ver una función que a partir de unas predicciones y unas etiquetas reales nos devuelve el valor de área y la curva lista para ser representada con \texttt{plot}:
+En \texttt{R} podemos trabajar con curvas _ROC_ usando el paquete \texttt{ROCR}. Vamos a ver una función que a partir de unas predicciones y unas etiquetas reales nos devuelve el área y la curva lista para ser representada con \texttt{plot}:
 
 ```{r}
 calcula_curva_roc = function(pred,truth){
@@ -447,7 +447,7 @@ calcula_curva_roc = function(pred,truth){
 Las cuatro curvas _ROC_ generadas quedan de la siguiente manera:
 
 \vspace{1cm}
-```{r,echo=FALSE}
+```{r,echo=FALSE,fig.align='center'}
 roc_glm_min_err = calcula_curva_roc(evaluar_regresion(ajustes_glm[3,glm_min_error_index],spam_procesado[-indices_train,-ncol(spam_procesado)]),spam_procesado[-indices_train,ncol(spam_procesado)])
 roc_glm_sin_pca_min_err = calcula_curva_roc(evaluar_regresion(ajustes_glm_sin_pca[3,glm_min_error_index],spam_procesado_sin_pca[-indices_train,-ncol(spam_procesado_sin_pca)]),spam_procesado_sin_pca[-indices_train,ncol(spam_procesado_sin_pca)])
 roc_glm_sin_pca_40 = calcula_curva_roc(evaluar_regresion(ajustes_glm_sin_pca[3,40],spam_procesado_sin_pca[-indices_train,-ncol(spam_procesado_sin_pca)]),spam_procesado_sin_pca[-indices_train,ncol(spam_procesado_sin_pca)])
@@ -628,7 +628,7 @@ o_seleccion_caracteristicas_sin_pca = subconjuntos_formulas(o_procesados_sin_pca
 o_formulas_sin_pca = o_seleccion_caracteristicas_sin_pca$formulas
 ```
 
-```{r}
+```{r,cache=TRUE}
 evalua_lm = function(formula,datos,subconjunto){
     reg_lin = do.call("lm", list(formula=formula, data=substitute(datos),
                                  subset=substitute(subconjunto)))
@@ -702,7 +702,7 @@ colnames(o_procesados_sin_pca_poly)[ncol(o_procesados_sin_pca_poly)] = "etiqueta
 
 A continuación, obtenemos los subconjuntos de predictores más relevantes y los utilizamos para ajustar sus modelos correspondientes:
 
-```{r}
+```{r,cache=TRUE}
 # Calculamos los nuevos conjuntos de fórmulas a partir de las nuevas características
 max_car_poly = ncol(o_procesados_poly)-1
 max_car_sin_pca_poly = ncol(o_procesados_sin_pca_poly)-1
@@ -812,7 +812,7 @@ Aun obteniendo una buena tasa de error, teniendo en cuenta que hemos utilizado p
 
 Con este propósito reutilizaremos el código asociado de la sección de clasificación:
 
-```{r}
+```{r,cache=TRUE}
 # Creamos la matriz de datos en el formato que necesita glmnet
 o_x = model.matrix(mejor_formula_pca_poly$formula,o_procesados_poly)[,-ncol(o_procesados_poly)]
 o_y = o_procesados_poly$etiquetas
@@ -861,3 +861,56 @@ A continuación se muestran los pesos asociados a los predictores que caracteriz
 | $PC1\cdot PC3$ | 447.12311 | $PC3\cdot PC6$ |  165.04666 |
 |      $PC3^2$   | -35.49378 |    $PC6^2$     |  -16.43187 |
 |       $PC4$    |  15.25194 |    Intercept   |   11.67902 |
+
+# Apéndice.
+
+Aquí se listan algunas funciones que no se han tratado explícitamente a lo largo de la memoria por encapsular tareas sencillas auxiliares cuyos detalles de implementación no son imprescindibles para comprender el contenido.
+
+## Funciones auxiliares.
+
+### Cálculo del porcentaje de error.
+
+```{r,eval=FALSE}
+porcentaje_error = function(clasificados,reales,fp=1,fn=1){
+    
+    reales[reales == 0] = -1
+    t = table(clasificados,reales)
+    total_predicciones = sum(t)
+    t[1,2] = t[1,2]*fn
+    t[2,1] = t[2,1]*fp
+    100*(1-sum(diag(t))/total_predicciones)
+    
+}
+```
+
+### Cálculo del error cuadrático medio.
+
+```{r,eval=FALSE}
+error_cuadratico_medio = function(clasificados,reales){
+    
+    mean((clasificados-reales)^2)
+    
+}
+```
+
+### Clasificar en dos categorías según un umbral.
+
+```{r,eval=FALSE}
+categorizar = function(clasificados,umbral=0.5){
+    
+    clasificados[clasificados < umbral] = -1
+    clasificados[clasificados >= umbral] = 1
+    clasificados
+    
+}
+```
+
+### Predecir etiquetas para unos datos con una regresión lineal.
+
+```{r,eval=FALSE}
+evaluar_regresion = function(regresion,datos){
+    
+    predict(regresion,datos) # Los datos no deben incluir las etiquetas
+    
+}
+```
