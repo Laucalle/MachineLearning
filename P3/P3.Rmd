@@ -479,7 +479,8 @@ En primer lugar, vamos a ver el error dentro de la muestra que presenta nuestro 
 
 ```{r}
 mejor_reg = ajustes_glm[3,23]
-etiquetas_train = evaluar_regresion(mejor_reg,spam_procesado[indices_train,-ncol(spam_procesado)])
+etiquetas_train = evaluar_regresion(mejor_reg,
+                                    spam_procesado[indices_train,-ncol(spam_procesado)])
 error_mejor_reg = porcentaje_error(categorizar(unlist(etiquetas_train)),
                                    spam_procesado[indices_train,ncol(spam_procesado)])
 ```
@@ -521,6 +522,24 @@ El modelo obtenido emplea las siguientes variables con sus pesos asociados:
 
 # Regresión.
 
+```{r,echo=FALSE}
+set.seed(3)
+
+error_cuadratico_medio = function(clasificados,reales){
+
+    mean((clasificados-reales)^2)
+
+}
+
+leer_datos_ozono = function(){
+    
+    datos = read.table("./datos/LAozone.data",sep=",",head=T)
+    etiquetas = datos[,1]
+    list(datos=datos[,-1],etiquetas=etiquetas)
+    
+}
+```
+
 Para el caso de regresión utilizaremos la base de datos de _Los Angeles ozone_, cuyas observaciones están compuestas por las siguientes características:
 
 \begin{itemize}
@@ -548,11 +567,24 @@ Para el caso de regresión utilizaremos la base de datos de _Los Angeles ozone_,
 
 \end{itemize}
 
-Esta base de datos no contiene valores perdidos; tampoco se nos provee de particiones prefijadas de entrenamiento y test, por lo que dividiremos la muestra en dos subconjuntos elegidos aleatoriamente (aunque con una semilla inicializada a un valor concreto) con una proporción 70\%-30\% respectivamente.
+Esta base de datos no contiene valores perdidos; tampoco se nos provee de particiones prefijadas de entrenamiento y test, por lo que dividiremos la muestra en dos subconjuntos elegidos aleatoriamente (aunque con una semilla inicializada a un valor concreto) con una proporción 70\%-30\% respectivamente:
+
+```{r}
+ozono = leer_datos_ozono()
+o_indexes_train = sample(nrow(ozono$datos),round(0.7*nrow(ozono$datos)))
+o_labels = ozono$etiquetas
+```
 
 ## Preprocesamiento de datos.
 
-Siguiendo los mismos razonamientos que en la sección dedicada a clasificación, emplearemos también transformaciones de _Yeo-Johnson_, centrado, escalado y análisis de componentes principales; en el caso de este último, volveremos a analizar la diferencia entre aplicarlo y no aplicarlo mediante dos conjuntos de datos preprocesados.
+Siguiendo los mismos razonamientos que en la sección dedicada a clasificación, emplearemos también transformaciones de _Yeo-Johnson_, centrado, escalado y análisis de componentes principales; en el caso de este último, volveremos a analizar la diferencia entre aplicarlo y no aplicarlo mediante dos conjuntos de datos preprocesados:
+
+```{r}
+o_procesados = preprocesar_datos(ozono$datos,o_indexes_train,
+                                 c("YeoJohnson","center","scale","pca"),0.9)
+o_procesados_sin_pca = preprocesar_datos(ozono$datos,o_indexes_train,
+                                         c("YeoJohnson","center","scale"),0.9)
+```
 
 Debido al número de características de este _dataset_, bastante pequeño en comparación con el empleado en clasificación, es de esperar que la reducción de dimensionalidad no sea tan drástica. Otra consecuencia de esto es que el riesgo de eliminar predictores relevantes es mayor.
 
@@ -575,3 +607,203 @@ Dada la naturaleza de este problema, no podemos usar regresión logística, por 
 Una vez aclarados estos detalles, vamos a pasar a seleccionar un conjunto de modelos candidatos; para medir su eficacia utilizaremos el error cuadrático medio (_MSE_):
 
 $$MSE=\frac{1}{N} \sum^N_{i=1} (\hat{y}-y)^2$$
+
+La función de \texttt{R} para encapsular el cálculo de la regresión y su error cuadrático es muy similar a la utilizada en clasificación:
+
+```{r,echo=FALSE}
+# Añadir las etiquetas para la regresión lineal
+o_procesados = cbind(o_procesados,ozono$etiquetas)
+o_procesados_sin_pca = cbind(o_procesados_sin_pca,ozono$etiquetas)
+colnames(o_procesados)[ncol(o_procesados)] = "etiquetas"
+colnames(o_procesados_sin_pca)[ncol(o_procesados_sin_pca)] = "etiquetas"
+
+# Tamaño máximo de los conjuntos de características de regsubsets
+o_max_caracteristicas = ncol(o_procesados)-1
+o_max_caracteristicas_sin_pca = ncol(o_procesados_sin_pca)-1
+
+# Calculamos los objetos fórmula para cada subconjunto de variables
+o_seleccion_caracteristicas = subconjuntos_formulas(o_procesados[o_indexes_train,],o_max_caracteristicas)
+o_formulas = o_seleccion_caracteristicas$formulas
+o_seleccion_caracteristicas_sin_pca = subconjuntos_formulas(o_procesados_sin_pca[o_indexes_train,],o_max_caracteristicas_sin_pca,metodo="forward")
+o_formulas_sin_pca = o_seleccion_caracteristicas_sin_pca$formulas
+```
+
+```{r}
+evalua_lm = function(formula,datos,subconjunto){
+    reg_lin = do.call("lm", list(formula=formula, data=substitute(datos),
+                                 subset=substitute(subconjunto)))
+    prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
+    error = error_cuadratico_medio(prediccion_test,datos[-subconjunto,ncol(datos)])
+    list(formula=formula, error = error, reg = reg_lin)
+}
+
+# Evaluamos todos los modelos
+ajustes = mapply(evalua_lm, o_formulas, MoreArgs = list(datos = o_procesados, 
+                                                        subconjunto = o_indexes_train))
+ajustes_sin_pca = mapply(evalua_lm, o_formulas_sin_pca, 
+                         MoreArgs = list(datos = o_procesados_sin_pca,
+                                         subconjunto = o_indexes_train))
+```
+
+A continuación se muestran dos gráficas correspondientes al _MSE_ de los modelos tanto con PCA como sin PCA:
+
+\vspace{0.7cm}
+```{r,echo=FALSE,fig.align='center'}
+con_pca_min_error_index = which.min(unlist(ajustes[2,]))
+sin_pca_min_error_index = which.min(unlist(ajustes_sin_pca[2,]))
+par(mfrow=c(2,2))
+plot(x=1:ncol(ajustes),y=ajustes[2,],pch=20,ylim=c(17,28),type="o",col="blue",xlab="Tamaño del conjunto",ylab="Error cuadrático", main = "Regresión lineal con PCA")
+points(x=con_pca_min_error_index, y=ajustes[2,con_pca_min_error_index], pch=10, col="red")
+plot(x=1:ncol(ajustes_sin_pca),y=ajustes_sin_pca[2,],pch=20,ylim=c(17,28),type="o",col="blue",xlab="Tamaño del conjunto",ylab="Error cuadrático", main = "Regresión lineal sin PCA")
+points(x=sin_pca_min_error_index, y=ajustes_sin_pca[2,sin_pca_min_error_index], pch=10, col="red")
+par(mfrow=c(1,1))
+```
+
+En rojo se representa el modelo cuyo error cuadrático es menor. Ya que se trata de errores que no bajan del rango $[18,21]$ (19.6393 en el caso de PCA y 21.2807 en el caso de sin PCA), vamos a estudiar sus errores residuales para tener más información al respecto. Primero vamos a ver los correspondientes al mejor modelo con PCA:
+
+\vspace{0.7cm}
+```{r,echo=FALSE,fig.align='center',fig.height=3.6,fig.width=5.3}
+plot(ajustes[3,6]$reg,which=c(1),pch=20,col="blue")
+```
+
+\vspace{0.5cm}
+Podemos identificar patrones en la disposición de los elementos; la curva nos indica una no linealidad de los datos, mientras que la dispersión de los puntos a mayores valores de la variable predicha sugiere un fenómeno denominado heterocedasticidad que comentaremos después de arreglar la no linealidad.
+
+```{r,echo=FALSE,fig.align='center',fig.height=3.6,fig.width=5.3}
+plot(ajustes_sin_pca[3,6]$reg,which=c(1),pch=20,col="blue")
+```
+
+\vspace{0.5cm}
+En esta segunda gráfica, que representa los errores residuales del mejor modelo sobre los datos a los que no se les ha aplicado PCA, podemos observar las mismas tendencias, reafirmando nuestra hipótesis de que el modelo no es el más adecuado en estos momentos. Por lo tanto, es preciso solucionar este problema.
+
+\newpage
+
+Para corregir nuestro modelo y así poder adaptarlo mejor a la no linealidad que presentan los datos, emplearemos la función \texttt{poly}, que calcula polinomios hasta un cierto grado a partir de las características originales. En nuestro caso, aplicaremos polinomios de grado dos (como sugieren las curvas rojas de las gráficas anteriores).
+
+```{r,echo=FALSE}
+o_procesados_poly = poly(as.matrix(o_procesados[,-ncol(o_procesados)]),degree=2)
+o_procesados_poly = cbind(as.data.frame(o_procesados_poly),o_labels)
+colnames(o_procesados_poly)[ncol(o_procesados_poly)] = "etiquetas"
+```
+
+Con el objetivo de que la dimensionalidad no se dispare, vamos a aplicar las transformaciones sobre el subconjunto de características que nos ha proporcionado un error más bajo para cada conjunto de datos (con y sin PCA).
+
+Dado que el proceso para utilizar \texttt{poly} es un poco críptico por el tipo de argumentos que recibe, vamos a mostrar únicamente la llamada para el modelo sin análisis de componentes principales, que es más ilustrativa (para más detalles, consultar el código):
+
+```{r}
+o_procesados_sin_pca_poly = poly(
+    as.matrix(o_procesados_sin_pca[,c("humidity","temp","ibh","ibt","vis","doy")]),
+    degree=2)
+```
+```{r,echo=FALSE}
+o_procesados_sin_pca_poly = cbind(as.data.frame(o_procesados_sin_pca_poly),o_labels)
+colnames(o_procesados_sin_pca_poly)[ncol(o_procesados_sin_pca_poly)] = "etiquetas"
+```
+
+A continuación, obtenemos los subconjuntos de predictores más relevantes y los utilizamos para ajustar sus modelos correspondientes:
+
+```{r}
+# Calculamos los nuevos conjuntos de fórmulas a partir de las nuevas características
+max_car_poly = ncol(o_procesados_poly)-1
+max_car_sin_pca_poly = ncol(o_procesados_sin_pca_poly)-1
+formulas_poly = subconjuntos_formulas(o_procesados_poly,max_car_poly)$formulas
+formulas_sin_pca_poly = subconjuntos_formulas(o_procesados_sin_pca_poly,
+                                              max_car_sin_pca_poly)$formulas
+
+# Ajustamos todos los modelos
+ajustes_poly = mapply(evalua_lm,formulas_poly,
+                      MoreArgs = list(datos = o_procesados_poly,
+                                      subconjunto = o_indexes_train))
+ajustes_sin_pca_poly = mapply(evalua_lm,formulas_sin_pca_poly,
+                              MoreArgs = list(datos = o_procesados_sin_pca_poly,
+                                              subconjunto = o_indexes_train))
+```
+
+Veamos cómo quedan los errores de estos nuevos modelos frente a los que no tenían transformaciones no lineales:
+
+\vspace{0.7cm}
+```{r,echo=FALSE,fig.align='center'}
+con_pca_poly_min_error_index = which.min(unlist(ajustes_poly[2,]))
+sin_pca_poly_min_error_index = which.min(unlist(ajustes_sin_pca_poly[2,]))
+
+layout(matrix(c(1,2,3,3),ncol=2,byrow=T))
+
+par(mai=rep(0.5,4))
+plot(x=1:ncol(ajustes_poly),y=ajustes_poly[2,],pch=20,xlim=c(1,27),ylim=c(14,26),type="o",col="blue",xlab="Tamaño del conjunto",ylab="Error cuadrático", main = "R. Lin. con PCA")
+points(x=con_pca_poly_min_error_index, y=ajustes_poly[2,con_pca_poly_min_error_index], pch=10, col="green")
+points(x=1:ncol(ajustes),y=ajustes[2,],type="o",pch=20,col="red")
+plot(x=1:ncol(ajustes_sin_pca_poly),y=ajustes_sin_pca_poly[2,],pch=20,ylim=c(14,26),type="o",col="blue",xlab="Tamaño del conjunto",ylab="Error cuadrático", main = "R. Lin. sin PCA")
+points(x=sin_pca_poly_min_error_index, y=ajustes_sin_pca_poly[2,sin_pca_poly_min_error_index], pch=10, col="green")
+points(x=1:ncol(ajustes_sin_pca),y=ajustes_sin_pca[2,],type="o",pch=20,col="red")
+par(mai=c(0,0,0,0))
+plot.new()
+legend(x="top",ncol=2,26,c("Con transformaciones","Sin transformaciones"),lty=c(1,1),lwd=c(2.5,2.5),col=c("blue","red"))
+```
+
+\newpage
+
+Es evidente que hemos logrado mejorar el ajuste añadiendo polinomios de orden dos a nuestros conjuntos de predictores. Como consecuencia de esto, las gráficas de errores residuales se deberían ver un poco diferentes:
+
+\vspace{0.7cm}
+```{r,echo=FALSE,fig.align='center',fig.height=3.6,fig.width=5.3}
+plot(ajustes_poly[3,con_pca_poly_min_error_index]$reg,which=c(1),pch=20,col="blue")
+```
+
+\vspace{0.7cm}
+Vemos que, tanto en la gráfica correspondiente al modelo con análisis de componentes principales (arriba) como en la correspondiente al modelo sin dicho análisis (abajo), la curva se ha suavizado; esto nos indica que el modelo ajusta mejor los datos. Por ello, los errores mínimos que obtenemos son, respectivamente, 14.2961 y 15.5141.
+
+\vspace{0.7cm}
+```{r,echo=FALSE,fig.align='center',fig.height=3.6,fig.width=5.3}
+plot(ajustes_sin_pca_poly[3,sin_pca_poly_min_error_index]$reg,which=c(1),pch=20,col="blue")
+```
+
+\newpage
+
+Una vez mejorado el modelo mediante transformaciones, hemos de pasar al siguiente problema. Como ya comentábamos, ambos modelos presentan heterocedasticidad, que es una varianza no constante a lo largo de un conjunto (en este caso, los errores). Una forma de remediar esto es homogeneizar los valores de las etiquetas aplicándoles una función de tipo logaritmo o raíz cuadrada, de forma que las variaciones más extremas se vean atenuadas en mayor medida que las variaciones más pequeñas; esto nos dará en la práctica una varianza más reducida. Vamos a solucionar también este problema.
+
+Para ello, aplicaremos la raíz cuadrada a las etiquetas antes de ajustar los dos mejores modelos en base a ellas:
+
+```{r}
+o_procesados_poly[,ncol(o_procesados_poly)] = 
+    sqrt(o_procesados_poly[,ncol(o_procesados_poly)])
+o_procesados_sin_pca_poly[,ncol(o_procesados_sin_pca_poly)] =
+    sqrt(o_procesados_sin_pca_poly[,ncol(o_procesados_sin_pca_poly)])
+```
+
+```{r,echo=FALSE}
+mejor_formula_pca_poly = ajustes_poly[1,17]
+mejor_formula_sin_pca_poly = ajustes_sin_pca_poly[1,16]
+
+# Obtenemos los dos mejores modelos pero con etiquetas logarítmicas
+sqrt_mejor_modelo_poly = evalua_lm(mejor_formula_pca_poly,o_procesados_poly,o_indexes_train)
+sqrt_mejor_modelo_sin_pca_poly = evalua_lm(mejor_formula_sin_pca_poly,o_procesados_sin_pca_poly,o_indexes_train)
+etiquetas_sqrt_mejor_modelo_poly = evaluar_regresion(sqrt_mejor_modelo_poly$reg,o_procesados_poly[-o_indexes_train,-ncol(o_procesados_poly)])
+etiquetas_sqrt_mejor_modelo_sin_pca_poly = evaluar_regresion(sqrt_mejor_modelo_sin_pca_poly$reg,o_procesados_sin_pca_poly[-o_indexes_train,-ncol(o_procesados_sin_pca_poly)])
+```
+
+De la misma forma que hemos aplicado una transformación logarítmica a las etiquetas, las predicciones estarán también en una escala logarítmica. Para encontrar las predicciones reales y poder calcular el error cuadrático verdadero debemos realizar el proceso inverso, es decir, una transformación exponencial:
+
+```{r}
+error_sqrt_mejor_modelo_poly = error_cuadratico_medio(etiquetas_sqrt_mejor_modelo_poly^2,
+                                                      o_labels[-o_indexes_train])
+error_sqrt_mejor_modelo_sin_pca_poly =
+    error_cuadratico_medio(etiquetas_sqrt_mejor_modelo_sin_pca_poly^2,
+                           o_labels[-o_indexes_train])
+```
+
+Las gráficas de errores residuales ahora muestran los puntos distribuidos de manera más uniforme:
+
+\vspace{0.7cm}
+```{r,echo=FALSE,fig.align='center',fig.height=3.6,fig.width=5.3}
+plot(sqrt_mejor_modelo_poly$reg,which=1,pch=20,col="blue")
+```
+
+\vspace{0.7cm}
+Como se puede observar en ambas gráficas, la varianza ya no se comporta de forma diferente según la zona de la población en la que nos fijemos; esto quiere decir que la heterocedasticidad ya no ocurre.
+
+```{r,echo=FALSE,fig.align='center',fig.height=3.6,fig.width=5.3}
+plot(sqrt_mejor_modelo_sin_pca_poly$reg,which=1,pch=20,col="blue")
+```
+
+\vspace{0.7cm}
+En términos de error cuadrático medio, esto se traduce en 13.7345 para el modelo con PCA y en 14.8126 para el modelo sin PCA. Hay que destacar la ligera mejora respecto a los modelos originales con heterocedasticidad; además, las estimaciones proporcionadas tras estas transformaciones deberían ser estadísticamente más fiables ya que una de las suposiciones del cálculo de regresiones lineales es que la varianza se mantiene uniforme en todo el conjunto de datos.
