@@ -862,11 +862,13 @@ A continuación se muestran los pesos asociados a los predictores que caracteriz
 |      $PC3^2$   | -35.49378 |    $PC6^2$     |  -16.43187 |
 |       $PC4$    |  15.25194 |    Intercept   |   11.67902 |
 
+\newpage
+
 # Apéndice.
 
-Aquí se listan algunas funciones que no se han tratado explícitamente a lo largo de la memoria por encapsular tareas sencillas auxiliares cuyos detalles de implementación no son imprescindibles para comprender el contenido.
-
 ## Funciones auxiliares.
+
+Aquí se listan algunas funciones que no se han tratado explícitamente a lo largo de la memoria por encapsular tareas sencillas auxiliares cuyos detalles de implementación no son imprescindibles para comprender el contenido.
 
 ### Cálculo del porcentaje de error.
 
@@ -914,3 +916,71 @@ evaluar_regresion = function(regresion,datos){
     
 }
 ```
+
+\newpage
+
+## Funcionamiento de algunas transformaciones de preprocesamiento.
+
+Para mostrar el funcionamiento de ciertos métodos de preprocesamiento utilizados en este documento, vamos a generar aleatoriamente unos datos de prueba de la siguiente forma:
+
+```{r}
+edad = sample(18:90,50)
+salario_anual = sample(10000:80000,50)
+estatura = sample(140:200,50)
+data_matrix = cbind(edad,salario_anual,estatura)
+
+print(head(data_matrix))
+```
+
+El código proporcionado para estas demostraciones no pretende tener una eficiencia óptima sino ser ilustrativo.
+
+### Centrado.
+
+El centrado sirve para uniformizar la media de todas las características. El proceso es simple: habrá que calcular la media de cada una de ellas y restársela a cada instancia particular:
+
+```{r}
+media_edad = mean(edad)
+media_salario_anual = mean(salario_anual)
+media_estatura = mean(estatura)
+
+data_matrix[,1] = data_matrix[,1] - media_edad
+data_matrix[,2] = data_matrix[,2] - media_salario_anual
+data_matrix[,3] = data_matrix[,3] - media_estatura
+
+print(head(data_matrix))
+print(mean(data_matrix[,1]))
+print(mean(data_matrix[,2]))
+print(mean(data_matrix[,3]))
+```
+
+Podemos observar que, en efecto, la media es uniforme ya que ronda un valor muy cercano a 0 en todos los casos.
+
+### Escalado.
+
+El escalado sirve para uniformizar la varianza de las variables independientes y así evitar que los algoritmos que calculan modelos favorezcan las características con mayores rangos. Para llevar a cabo un escalado, obtenemos la desviación típica de cada predictor y dividimos cada instancia del mismo entre ella.
+
+```{r}
+sd_edad = sd(edad)
+sd_salario_anual = sd(salario_anual)
+sd_estatura = sd(estatura)
+
+data_matrix[,1] = data_matrix[,1] / sd_edad
+data_matrix[,2] = data_matrix[,2] / sd_salario_anual
+data_matrix[,3] = data_matrix[,3] / sd_estatura
+
+print(head(data_matrix))
+print(sd(data_matrix[,1]))
+print(sd(data_matrix[,2]))
+print(sd(data_matrix[,3]))
+```
+
+De nuevo comprobamos que la técnica ha conseguido su objetivo: la desviación típica de todas las características es 1.
+
+Finalmente, como consecuencia natural, la media de toda la matriz de datos tiende a 0 y la desviación típica a 1:
+
+```{r}
+print(mean(data_matrix))
+print(sd(data_matrix))
+```
+
+La desventaja de aplicar técnicas de preprocesado es que las características pierden mucha interpretabilidad, como hemos podido observar a lo largo del proceso. Por otro lado, la ventaja es que muchos modelos suponen una distribución normal de los datos, por lo que estamos adecuándolos para un correcto funcionamiento.
