@@ -1,25 +1,15 @@
 ---
-title: "Proyecto final"
-author:
-    - "Laura Calle Caraballo"
-    - "Javier León Palomares"
-date: "1 de junio de 2017"
 lang: es
-header-includes:
-    - \usepackage{amsmath}
-    - \usepackage{fancyhdr}
-    - \usepackage[math]{iwona}
-    - \usepackage{color}
-    - \usepackage{array}
-    - \pagestyle{fancy}
-    - \fancyhead[LO]{\textcolor[rgb]{0,0,0}{Grado en Ingeniería Informática}}
-    - \fancyhead[RO]{\textcolor[rgb]{0.2,0.2,0.9}{Aprendizaje Automático, Curso 2016-2017}}
+date: "1 de junio de 2017"
 output: 
     pdf_document:
         fig_caption: yes
         toc: true
         number_sections: yes
         highlight: pygments
+        includes:
+            in_header: header.tex
+            before_body: titlepage.tex
     
 ---
 
