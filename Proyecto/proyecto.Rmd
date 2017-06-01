@@ -1,0 +1,71 @@
+---
+title: "Proyecto final"
+author:
+    - "Laura Calle Caraballo"
+    - "Javier León Palomares"
+date: "1 de junio de 2017"
+lang: es
+header-includes:
+    - \usepackage{amsmath}
+    - \usepackage{fancyhdr}
+    - \usepackage[math]{iwona}
+    - \usepackage{color}
+    - \usepackage{array}
+    - \pagestyle{fancy}
+    - \fancyhead[LO]{\textcolor[rgb]{0,0,0}{Grado en Ingeniería Informática}}
+    - \fancyhead[RO]{\textcolor[rgb]{0.2,0.2,0.9}{Aprendizaje Automático, Curso 2016-2017}}
+output: 
+    pdf_document:
+        fig_caption: yes
+        toc: true
+        number_sections: yes
+        highlight: pygments
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\newpage
+
+# Introducción
+
+Para la realización de este trabajo se ha empleado la base de datos _Tennis Major Tournament Match Statistics_, que recoge información acerca de los partidos disputados en los _Grand Slam_ de 2013 (excepto por el Abierto de Australia, que por alguna razón es el de 2014). Los campos aportados por cada partido son los siguientes:
+
+\begin{itemize}
+
+    \item
+    Nombres de los participantes.
+    \item
+    Resultado (desde el punto de vista del primer participante).
+    \item
+    Ronda.
+    \item
+    Porcentajes relativos al primer servicio de cada jugador: jugados y ganados.
+    \item
+    Porcentajes relativos al segundo servicio de cada jugador: jugados y ganados.
+    \item
+    Número de \textit{aces} por cada jugador.
+    \item
+    Número de dobles faltas cometidas por cada jugador.
+    \item
+    Número de puntos ganadores por cada jugador.
+    \item
+    Número de errores no forzados cometidos por cada jugador.
+    \item
+    Número de puntos de \textit{break} creados y ganados por cada jugador.
+    \item
+    Número de puntos en la red intentados y ganados por cada jugador.
+    \item
+    Puntos totales ganados por cada jugador.
+    \item
+    Juegos por set de cada jugador.
+    \item
+    Número total de sets ganados por cada jugador.
+    
+\end{itemize}
+
+Esta base de datos contiene valores perdidos. No obstante, todos ellos representan cantidades que se pueden sustituir por cero de forma segura ya que denotan, por ejemplo, ausencia de errores no forzados, ausencia de _aces_ o sets no jugados (por abandono o por no ser necesarios).
+
+No existe una división predefinida en conjuntos de entrenamiento y test, por lo que en principio la realizaremos nosotros tomando observaciones aleatorias según la proporción 70\%-30\%.
