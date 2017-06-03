@@ -19,6 +19,81 @@ knitr::opts_chunk$set(echo = TRUE)
 
 \newpage
 
+```{r,echo=FALSE,message=FALSE}
+library("caret", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
+library("e1071", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
+library("glmnet", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
+library("ROCR", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
+library("leaps", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
+```
+
+```{r,echo=FALSE}
+set.seed(3)
+
+leer_datos_partidos = function(){
+
+    datos = read.csv("./datos/partidos.csv", header = TRUE)
+    datos = datos[,-c(1,2,3)]
+    # Añadimos tipo de pista como característica
+    pista_dura = c(rep(1,253),rep(0,252),rep(1,202),rep(0,236))
+    tierra_batida = c(rep(0,253),rep(1,252),rep(0,438))
+    datos = cbind(datos,pista_dura,tierra_batida)
+    etiquetas = datos[,1]
+    indices = sample(nrow(datos),round(0.7*nrow(datos)))
+    list(datos=datos[,-1],etiquetas=etiquetas,indices_train=indices)
+    
+}
+
+# Preprocesamiento (centrado, escalado, análisis de componentes principales...)
+preprocesar_datos = function(datos,indices_train,metodos,umbral_varianza=0.9){
+    
+    preprocess_obj = preProcess(datos[indices_train,],method=metodos,umbral_varianza)
+    nuevosDatos = predict(preprocess_obj,datos)
+    
+}
+
+# Evalúa la regresión para unos datos
+evaluar_regresion = function(regresion,datos){
+    
+    predict(regresion,datos) # Los datos no deben incluir las etiquetas
+    
+}
+
+porcentaje_error = function(clasificados,reales,fp=1,fn=1){
+    
+    reales[reales == 0] = -1
+    t = table(clasificados,reales)
+    total_predicciones = sum(t)
+    t[1,2] = t[1,2]*fn
+    t[2,1] = t[2,1]*fp
+    100*(1-sum(diag(t))/total_predicciones)
+    
+}
+
+categorizar = function(clasificados,umbral=0.5){
+    
+    clasificados[clasificados < umbral] = -1
+    clasificados[clasificados >= umbral] = 1
+    clasificados
+    
+}
+
+# Evalúa una regresión lineal dada una fórmula y unos datos de entrenamiento 
+evalua_lm = function(formula,datos,subconjunto,fp=1,fn=1){
+    reg_lin = do.call("lm", list(formula=formula, data=substitute(datos), subset=substitute(subconjunto)))
+    prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
+    porc_error = porcentaje_error(categorizar(prediccion_test),datos[-subconjunto,ncol(datos)],fp,fn)
+    list(formula=formula, error = porc_error)
+}
+
+evalua_glm = function(formula,datos,subconjunto,fp=1,fn=1,familia=binomial()){
+    reg_lin = do.call("glm", list(formula=formula, data=substitute(datos), subset=substitute(subconjunto),familia))
+    prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
+    porc_error = porcentaje_error(categorizar(prediccion_test),datos[-subconjunto,ncol(datos)],fp,fn)
+    list(formula=formula, error=porc_error,reg=reg_lin)
+}
+```
+
 # Introducción
 
 Para la realización de este trabajo se ha empleado la base de datos _Tennis Major Tournament Match Statistics_, que recoge información acerca de los partidos disputados en los _Grand Slam_ de 2013 (excepto por el Abierto de Australia, que por alguna razón es el de 2014). Los campos aportados por cada partido son los siguientes:
@@ -58,4 +133,152 @@ Para la realización de este trabajo se ha empleado la base de datos _Tennis Maj
 
 Esta base de datos contiene valores perdidos. No obstante, todos ellos representan cantidades que se pueden sustituir por cero de forma segura ya que denotan, por ejemplo, ausencia de errores no forzados, ausencia de _aces_ o sets no jugados (por abandono o por no ser necesarios).
 
-No existe una división predefinida en conjuntos de entrenamiento y test, por lo que en principio la realizaremos nosotros tomando observaciones aleatorias según la proporción 70\%-30\%.
+Debido a que este conjunto de datos no tiene una variable de respuesta definida explícitamente, vamos a elegir una: el resultado del partido. Para que la predicción no sea trivial, es necesario eliminar algunas características que permiten determinar unívocamente el resultado, como el número de sets ganados por cada jugador y la puntuación dentro de los mismos. Además, por la naturaleza del dominio del problema, aprovecharemos que se nos proporciona implícitamente el tipo de pista en el que se han jugado los partidos para considerarlo como una característica más. Una vez realizado todo esto, comprobaremos así si es factible utilizar el resto de los predictores con el mismo propósito.
+
+En cuanto a la división en conjuntos de entrenamiento y test, no se nos proporciona un criterio de antemano, por lo que en principio la realizaremos nosotros tomando observaciones aleatorias según la proporción 70\%-30\%.
+
+\newpage
+
+# Preprocesamiento de datos.
+
+Para realizar el preprocesamiento de datos hemos empleado la función \texttt{preProcess} del paquete \texttt{caret}; esta función permite aplicar distintos métodos de transformación para adecuar las características iniciales a los modelos que vamos a emplear.
+
+A continuación vamos a explicar los métodos utilizados:
+
+\begin{itemize}
+
+    \item
+    Transformación de \textit{Yeo-Johnson}: es muy similar a la transformación de \textit{Box-Cox} pero, a diferencia de ésta, permite la existencia de valores negativos ó 0. En nuestro caso, no existen valores negativos pero sí es bastante frecuente encontrar valores iguales a 0.
+    \item
+    Centrado: se realiza la media de los valores de cada característica y se le resta a cada valor particular, siendo la nueva media igual a 0. Esto reduce las distancias entre las distintas características.
+    \item
+    Escalado: este método divide los valores por su desviación típica. El objetivo de esta transformación es tener características con rangos uniformes para evitar problemas con modelos que consideran distancias entre valores (lo cual favorecería las características con valores más separados entre sí); además, la independencia respecto a la escala en la que se realizaron las medidas también es importante.
+    \item
+    Análisis de componentes principales (\textit{PCA}): se buscan nuevos ejes de coordenadas de forma que la varianza de algunas características sea lo suficientemente pequeña como para descartarlas. Como resultado se consigue una reducción de dimensionalidad donde las nuevas características, que no guardan relación de significado con las originales, representarán la parte más significativa de la varianza de los datos.
+
+\end{itemize}
+
+Otro método que se podría haber utilizado para reducir la dimensionalidad de los datos es _Near Zero Variance_, que elimina predictores con varianza cercana a 0, ya que esto suele indicar que su valor es casi constante a lo largo de la muestra y apenas aportan información. Sin embargo, hemos comprobado empíricamente que no afecta a nuestro conjunto de datos en particular.
+
+Una vez explicadas las transformaciones, veamos cómo se traduce en la práctica a código:
+
+```{r}
+# Lectura de datos y obtención del conjunto de entrenamiento
+datos = leer_datos_partidos()
+etiquetas = datos$etiquetas
+indices_train = datos$indices_train
+datos = datos$datos
+
+preprocesar_datos = function(datos,indices_train,metodos,umbral_varianza=0.9){
+    
+    preprocess_obj = preProcess(datos[indices_train,],method=metodos,umbral_varianza)
+    nuevosDatos = predict(preprocess_obj,datos)
+    
+}
+
+datos[is.na(datos)] = 0 # Sustituimos los valores perdidos por 0
+datos = subset(datos,select=-c(FNL1,FNL2)) # Número de sets ganados por cada uno
+datos = subset(datos,select=-c(ST1.1,ST2.1,ST3.1,ST4.1,ST5.1,ST1.2,ST2.2,ST3.2,ST4.2,ST5.2))
+datos_procesados = preprocesar_datos(datos,indices_train,
+                                     c("YeoJohnson","center","scale","pca"),0.85)
+datos_procesados_sin_pca = preprocesar_datos(datos,indices_train,
+                                             c("YeoJohnson","center","scale"))
+```
+```{r,echo=FALSE}
+# Añadir las etiquetas para la regresión lineal
+datos_procesados = cbind(datos_procesados,etiquetas)
+datos_procesados_sin_pca = cbind(datos_procesados_sin_pca,etiquetas)
+colnames(datos_procesados)[ncol(datos_procesados)] = "etiquetas"
+colnames(datos_procesados_sin_pca)[ncol(datos_procesados_sin_pca)] = "etiquetas"
+```
+
+Ya que existe la posibilidad de que el análisis de componentes principales elimine características relevantes, vamos a realizar experimentos separados preprocesando los datos con y sin esta técnica.
+
+# Modelos a estudiar
+
+En principio, podemos comenzar comprobando la calidad de un modelo lineal; tras ello, fuese o no necesario (debido a la naturaleza de este proyecto), probaremos modelos no lineales como _Random Forest_, _Boosting_, _Support Vector Machines_ o redes neuronales.
+
+## Modelos lineales
+
+Ya que el objetivo de este proyecto es analizar la eficacia de modelos no lineales, elegiremos un único modelo lineal de forma no tan exhaustiva como en el trabajo 3.
+
+En primer lugar, vamos a formarnos una idea de la utilidad en este contexto de ambos conjuntos de datos preprocesados guiándonos por la tasa de error que produce una regresión logística con todas sus características:
+
+```{r}
+reg_log = evalua_glm(etiquetas~.,datos_procesados,indices_train)
+reg_log_sin_pca = evalua_glm(etiquetas~.,datos_procesados_sin_pca,indices_train)
+```
+
+El primer ajuste da un error de 8.83\%, frente al segundo, que da un 5.3\%. Según este criterio, elegiremos el segundo modelo; no obstante, ya que utiliza todas las características a su disposición, vamos a tratar de encontrar un subconjunto de ellas con la función \texttt{regsubsets} que mantenga la calidad a la vez que ofrece una reducción de dimensionalidad.
+
+Dicha función es empleada de la siguiente forma para obtener los subconjuntos de variables con los que vamos a calcular las distintas regresiones:
+
+```{r}
+subconjuntos_formulas = function(datos,max_tam,metodo="exhaustive"){
+    # Obtenemos los subconjuntos de variables
+    subsets = regsubsets(etiquetas~.,data=datos,method=metodo,nvmax=max_tam)
+    # Obtenemos la matriz de características seleccionadas por grupos de tamaño [1,nvmax]
+    matriz_subsets = summary(subsets)$which[,-1]
+    # Guardamos, para cada fila, las columnas cuyas variables han sido seleccionadas.
+    seleccionados = apply(matriz_subsets,1,which)
+    # Obtenemos los nombres de esas columnas (para utilizarlos en la regresión)
+    seleccionados = lapply(seleccionados,names)
+    # Construimos la suma de las variables que usaremos en la regresión lineal
+    seleccionados = mapply(paste,seleccionados,MoreArgs=list(collapse="+"))
+    # Construimos strings equivalentes a las fórmulas que usaremos en la regresión lineal
+    formulas = mapply(paste,rep("etiquetas~",max_tam),seleccionados,USE.NAMES = FALSE)
+    # Construimos objetos fórmula
+    formulas = apply(matrix(formulas,nrow=length(formulas)), 1, as.formula)
+    list(formulas=formulas,cp=summary(subsets)$cp,bic=summary(subsets)$bic)
+}
+```
+
+Un ejemplo de uso es:
+
+```{r}
+# Seleccionamos subconjuntos de características para los datos con PCA
+max_caracteristicas = ncol(datos_procesados)-1
+seleccion_caracteristicas = subconjuntos_formulas(datos_procesados[indices_train,],
+                                                  max_caracteristicas,metodo="exhaustive")
+formulas = seleccion_caracteristicas$formulas
+```
+
+```{r,echo=FALSE}
+# Seleccionamos subconjuntos de características para los datos sin PCA
+max_caracteristicas_sin_pca = ncol(datos_procesados_sin_pca)-1
+seleccion_caracteristicas_sin_pca = subconjuntos_formulas(datos_procesados_sin_pca[indices_train,],max_caracteristicas_sin_pca,metodo="exhaustive")
+formulas_sin_pca = seleccion_caracteristicas_sin_pca$formulas
+```
+
+\newpage
+
+Ahora realizaremos ajustes para todos los subconjuntos de características obtenidos mediante el código anterior:
+
+```{r}
+ajustes_glm = mapply(evalua_glm, formulas, 
+                     MoreArgs = list(datos = datos_procesados, 
+                                     subconjunto = indices_train))
+ajustes_glm_sin_pca = mapply(evalua_glm, formulas_sin_pca, 
+                             MoreArgs = list(datos = datos_procesados_sin_pca, 
+                                             subconjunto = indices_train))
+```
+
+Para comparar más fácilmente los porcentajes de error obtenidos por los modelos, vamos a representarlos en la siguiente gráfica:
+
+\vspace{0.7cm}
+
+```{r,echo=FALSE,,fig.align='center'}
+glm_min_error_index = which.min(unlist(ajustes_glm[2,]))
+glm_sin_pca_min_error_index = which.min(unlist(ajustes_glm_sin_pca[2,]))
+plot(x=1:ncol(ajustes_glm_sin_pca),y=ajustes_glm_sin_pca[2,],pch=20,ylim=c(4,30),type="o",col="blue",xlab="Tamaño del conjunto",ylab="Error porcentual", main = "Comparativa de regresiones logísticas")
+points(x=glm_sin_pca_min_error_index, y=ajustes_glm_sin_pca[2,glm_sin_pca_min_error_index], pch=19, col="orange")
+points(x=1:ncol(ajustes_glm),y=ajustes_glm[2,],type="o",pch=20,col="red")
+points(x=glm_min_error_index, y=ajustes_glm[2,glm_min_error_index],pch=19,col="green")
+legend(16.5,29,c("Sin PCA","Con PCA"),lty=c(1,1),lwd=c(2.5,2.5),col=c("blue","red"))
+```
+
+\vspace{0.7cm}
+
+El punto señalado en verde nos indica el conjunto de predictores cuyo error ha sido menor (8.48\%) para los datos con análisis de componentes principales. Análogamente, el punto naranja señala el conjunto de características que ha dado menor error (4.59\%) para los datos sin PCA.
+
+Ya que hemos conseguido no sólo reducir el número de predictores necesarios (de 28 a 13) sino también el error, vamos a elegir el modelo que proporciona un 4.59\% de error para futuras comparaciones con modelos no lineales.
