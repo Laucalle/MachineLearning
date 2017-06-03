@@ -7,7 +7,6 @@ leer_datos_partidos = function(){
     # Añadimos tipo de pista como característica
     pista_dura = c(rep(1,253),rep(0,252),rep(1,202),rep(0,236))
     tierra_batida = c(rep(0,253),rep(1,252),rep(0,438))
-    #hierba = c(rep(0,707),rep(1,236))
     datos = cbind(datos,pista_dura,tierra_batida)
     etiquetas = datos[,1]
     indices = sample(nrow(datos),round(0.7*nrow(datos)))
@@ -24,7 +23,7 @@ preprocesar_datos = function(datos,indices_train,metodos,umbral_varianza=0.9){
 }
 
 # Evalúa la regresión para unos datos
-evaluar_regresion = function(regresion,datos){
+evaluar_modelo = function(regresion,datos){
     
     predict(regresion,datos) # Los datos no deben incluir las etiquetas
     
@@ -49,19 +48,26 @@ categorizar = function(clasificados,umbral=0.5){
     
 }
 
-# Evalúa una regresión lineal dada una fórmula y unos datos de entrenamiento 
+# Evalúan un cierto modelo dada una fórmula y unos datos de entrenamiento 
 evalua_lm = function(formula,datos,subconjunto,fp=1,fn=1){
     reg_lin = do.call("lm", list(formula=formula, data=substitute(datos), subset=substitute(subconjunto)))
-    prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
+    prediccion_test = evaluar_modelo(reg_lin,datos[-subconjunto,-ncol(datos)])
     porc_error = porcentaje_error(categorizar(prediccion_test),datos[-subconjunto,ncol(datos)],fp,fn)
     list(formula=formula, error = porc_error)
 }
 
 evalua_glm = function(formula,datos,subconjunto,fp=1,fn=1,familia=binomial()){
     reg_lin = do.call("glm", list(formula=formula, data=substitute(datos), subset=substitute(subconjunto),familia))
-    prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
+    prediccion_test = evaluar_modelo(reg_lin,datos[-subconjunto,-ncol(datos)])
     porc_error = porcentaje_error(categorizar(prediccion_test),datos[-subconjunto,ncol(datos)],fp,fn)
     list(formula=formula, error=porc_error,reg=reg_lin)
+}
+
+evalua_random_forest = function(datos,subconjunto,arboles=500){
+    rf = do.call("randomForest",list(formula=etiquetas~.,data=substitute(datos),subset=substitute(subconjunto),ntree=arboles,mtry=sqrt(ncol(datos)-1)))
+    rf_pred = evaluar_modelo(rf,datos[-subconjunto,-ncol(datos)])
+    rf_error = porcentaje_error(categorizar(rf_pred),datos[-subconjunto,ncol(datos)])
+    list(arboles=arboles,error=rf_error,rf=rf)
 }
 
 # Calcula objetos fórmula a partir de subconjuntos de variables
@@ -112,8 +118,11 @@ datos_procesados_sin_pca = cbind(datos_procesados_sin_pca,etiquetas)
 colnames(datos_procesados)[ncol(datos_procesados)] = "etiquetas"
 colnames(datos_procesados_sin_pca)[ncol(datos_procesados_sin_pca)] = "etiquetas"
 
-reg_lin = evalua_glm(etiquetas~.,datos_procesados,indices_train)
-reg_lin_sin_pca = evalua_glm(etiquetas~.,datos_procesados_sin_pca,indices_train)
+#######################################
+# Regresión lineal / logística
+
+reg_log = evalua_glm(etiquetas~.,datos_procesados,indices_train)
+reg_log_sin_pca = evalua_glm(etiquetas~.,datos_procesados_sin_pca,indices_train)
 
 # Seleccionamos subconjuntos de características para los datos con PCA
 max_caracteristicas = ncol(datos_procesados)-1
@@ -137,3 +146,22 @@ points(x=glm_sin_pca_min_error_index, y=ajustes_glm_sin_pca[2,glm_sin_pca_min_er
 points(x=1:ncol(ajustes_glm),y=ajustes_glm[2,],type="o",pch=20,col="red")
 points(x=glm_min_error_index, y=ajustes_glm[2,glm_min_error_index],pch=19,col="green")
 legend(16.5,29,c("Sin PCA","Con PCA"),lty=c(1,1),lwd=c(2.5,2.5),col=c("blue","red"))
+
+#######################################
+# Random Forest
+
+num_arboles = seq(10,100,10)
+rf_pca = evalua_random_forest(datos_procesados,indices_train)
+rf_sin_pca = evalua_random_forest(datos_procesados_sin_pca,indices_train)
+
+ajustes_rf = mapply(evalua_random_forest,num_arboles,MoreArgs = list(datos=datos_procesados,subconjunto=indices_train))
+ajustes_rf_sin_pca = mapply(evalua_random_forest,num_arboles,MoreArgs = list(datos=datos_procesados_sin_pca,subconjunto=indices_train))
+
+# Representamos la variación del error en función del número de árboles
+rf_min_error_index = which.min(unlist(ajustes_rf[2,]))
+rf_sin_pca_min_error_index = which.min(unlist(ajustes_rf_sin_pca[2,]))
+plot(x=num_arboles,y=ajustes_rf_sin_pca[2,],pch=20,ylim=c(4,19),type="o",col="blue",xlab="Número de árboles",ylab="Error porcentual", main = "Comparativa de Random Forests")
+points(x=ajustes_rf_sin_pca[1,rf_sin_pca_min_error_index], y=ajustes_rf_sin_pca[2,rf_sin_pca_min_error_index], pch=19, col="orange")
+points(x=num_arboles,y=ajustes_rf[2,],type="o",pch=20,col="red")
+points(x=ajustes_rf[1,rf_min_error_index], y=ajustes_rf[2,rf_min_error_index],pch=19,col="green")
+legend(67,19,c("Sin PCA","Con PCA"),lty=c(1,1),lwd=c(2.5,2.5),col=c("blue","red"))
