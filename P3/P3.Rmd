@@ -20,8 +20,6 @@ output:
         toc: true
         number_sections: yes
         highlight: pygments
-        includes:
-            after_body: P3Apendice.Rmd
     
 ---
 
