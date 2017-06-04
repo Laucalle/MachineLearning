@@ -63,11 +63,20 @@ evalua_glm = function(formula,datos,subconjunto,fp=1,fn=1,familia=binomial()){
     list(formula=formula, error=porc_error,reg=reg_lin)
 }
 
-evalua_random_forest = function(datos,subconjunto,arboles=500){
+evalua_random_forest = function(datos,subconjunto,arboles=100){
     rf = do.call("randomForest",list(formula=etiquetas~.,data=substitute(datos),subset=substitute(subconjunto),ntree=arboles,mtry=sqrt(ncol(datos)-1)))
     rf_pred = evaluar_modelo(rf,datos[-subconjunto,-ncol(datos)])
     rf_error = porcentaje_error(categorizar(rf_pred),datos[-subconjunto,ncol(datos)])
     list(arboles=arboles,error=rf_error,rf=rf)
+}
+
+# Evalúa un Random Forest con k-fold cv repetida i veces 
+evalua_random_forest_cv = function(datos,etiquetas,arboles=100,k=10,i=1,metodo="cv"){
+    mtry = sqrt(ncol(datos))
+    rf_train_control = trainControl(method=metodo,number=k,repeats=i)
+    rf_train = train(datos,as.factor(etiquetas),method="rf",ntree=arboles,preProcess=c("YeoJohnson","center","scale"),trControl=rf_train_control,tuneGrid=expand.grid(.mtry=mtry))
+    rf_error = (1-rf_train$results$Accuracy)*100
+    list(arboles=arboles,error=rf_error,rf=rf_train)
 }
 
 # Calcula objetos fórmula a partir de subconjuntos de variables
@@ -107,7 +116,6 @@ datos[is.na(datos)] = 0
 # Determinar quién ha ganado viendo los sets es trivial, así que quitamos dicha información
 datos = subset(datos,select=-c(FNL1,FNL2)) # Número de sets ganados por cada uno
 datos = subset(datos,select=-c(ST1.1,ST2.1,ST3.1,ST4.1,ST5.1,ST1.2,ST2.2,ST3.2,ST4.2,ST5.2)) # Juegos de cada set
-
 # Preprocesamos los datos
 datos_procesados = preprocesar_datos(datos,indices_train,c("YeoJohnson","center","scale","pca"),0.85)
 datos_procesados_sin_pca = preprocesar_datos(datos,indices_train,c("YeoJohnson","center","scale"))
@@ -147,21 +155,39 @@ points(x=1:ncol(ajustes_glm),y=ajustes_glm[2,],type="o",pch=20,col="red")
 points(x=glm_min_error_index, y=ajustes_glm[2,glm_min_error_index],pch=19,col="green")
 legend(16.5,29,c("Sin PCA","Con PCA"),lty=c(1,1),lwd=c(2.5,2.5),col=c("blue","red"))
 
+error_glm = ajustes_glm_sin_pca[2,glm_sin_pca_min_error_index]
+
 #######################################
 # Random Forest
 
 num_arboles = seq(10,100,10)
-rf_pca = evalua_random_forest(datos_procesados,indices_train)
-rf_sin_pca = evalua_random_forest(datos_procesados_sin_pca,indices_train)
+# rf_pca = evalua_random_forest(datos_procesados,indices_train)
+# rf_sin_pca = evalua_random_forest(datos_procesados_sin_pca,indices_train)
+# 
+# ajustes_rf = mapply(evalua_random_forest,num_arboles,MoreArgs = list(datos=datos_procesados,subconjunto=indices_train))
+# ajustes_rf_sin_pca = mapply(evalua_random_forest,num_arboles,MoreArgs = list(datos=datos_procesados_sin_pca,subconjunto=indices_train))
+# 
+# # Representamos la variación del error en función del número de árboles
+# rf_min_error_index = which.min(unlist(ajustes_rf[2,]))
+# rf_sin_pca_min_error_index = which.min(unlist(ajustes_rf_sin_pca[2,]))
+# plot(x=num_arboles,y=ajustes_rf_sin_pca[2,],pch=20,ylim=c(4,19),type="o",col="blue",xlab="Número de árboles",ylab="Error porcentual", main = "Comparativa de Random Forests")
+# points(x=ajustes_rf_sin_pca[1,rf_sin_pca_min_error_index], y=ajustes_rf_sin_pca[2,rf_sin_pca_min_error_index], pch=19, col="orange")
+# points(x=num_arboles,y=ajustes_rf[2,],type="o",pch=20,col="red")
+# points(x=ajustes_rf[1,rf_min_error_index], y=ajustes_rf[2,rf_min_error_index],pch=19,col="green")
+# legend(67,19,c("Sin PCA","Con PCA"),lty=c(1,1),lwd=c(2.5,2.5),col=c("blue","red"))
 
-ajustes_rf = mapply(evalua_random_forest,num_arboles,MoreArgs = list(datos=datos_procesados,subconjunto=indices_train))
-ajustes_rf_sin_pca = mapply(evalua_random_forest,num_arboles,MoreArgs = list(datos=datos_procesados_sin_pca,subconjunto=indices_train))
+# Otra forma mediante validación cruzada
+# Obtenemos el mejor hiperparámetro número de árboles
+ajustes_rf_cv = mapply(evalua_random_forest_cv,num_arboles,MoreArgs = list(datos=datos[indices_train,],etiquetas=etiquetas[indices_train],k=10,i=1))
+rf_cv_min_error_index = which.min(unlist(ajustes_rf_cv[2,]))
 
-# Representamos la variación del error en función del número de árboles
-rf_min_error_index = which.min(unlist(ajustes_rf[2,]))
-rf_sin_pca_min_error_index = which.min(unlist(ajustes_rf_sin_pca[2,]))
-plot(x=num_arboles,y=ajustes_rf_sin_pca[2,],pch=20,ylim=c(4,19),type="o",col="blue",xlab="Número de árboles",ylab="Error porcentual", main = "Comparativa de Random Forests")
-points(x=ajustes_rf_sin_pca[1,rf_sin_pca_min_error_index], y=ajustes_rf_sin_pca[2,rf_sin_pca_min_error_index], pch=19, col="orange")
-points(x=num_arboles,y=ajustes_rf[2,],type="o",pch=20,col="red")
-points(x=ajustes_rf[1,rf_min_error_index], y=ajustes_rf[2,rf_min_error_index],pch=19,col="green")
-legend(67,19,c("Sin PCA","Con PCA"),lty=c(1,1),lwd=c(2.5,2.5),col=c("blue","red"))
+plot(x=num_arboles,y=ajustes_rf_cv[2,],pch=20,ylim=c(4,19),type="o",col="blue",xlab="Número de árboles",ylab="% Error de validación cruzada", main = "Comparativa de número de árboles")
+points(x=ajustes_rf_cv[1,rf_cv_min_error_index], y=ajustes_rf_cv[2,rf_cv_min_error_index], pch=19, col="orange")
+
+rf_pred_test = evaluar_modelo(ajustes_rf_cv[3,rf_cv_min_error_index]$rf,datos[-indices_train,])
+error_rf = porcentaje_error(as.numeric(rf_pred_test),etiquetas[-indices_train])
+
+# Con tune
+# tuned_rf = tune.randomForest(datos[indices_train,],as.factor(etiquetas[indices_train]),mtry=sqrt(ncol(datos)),ntree=seq(10,100,10))
+# rf_pred_test = evaluar_modelo(tuned_rf$best.model,datos[-indices_train,])
+# error_rf = porcentaje_error(as.numeric(rf_pred_test),etiquetas[-indices_train])
