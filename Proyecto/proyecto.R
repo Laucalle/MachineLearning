@@ -71,10 +71,9 @@ evalua_random_forest = function(datos,subconjunto,arboles=100){
 }
 
 # Evalúa un Random Forest con k-fold cv repetida i veces 
-evalua_random_forest_cv = function(datos,etiquetas,arboles=100,k=10,i=1,metodo="cv"){
+evalua_random_forest_cv = function(datos,etiquetas,control,arboles=100){
     mtry = sqrt(ncol(datos))
-    rf_train_control = trainControl(method=metodo,number=k,repeats=i)
-    rf_train = train(datos,as.factor(etiquetas),method="rf",ntree=arboles,preProcess=c("YeoJohnson","center","scale"),trControl=rf_train_control,tuneGrid=expand.grid(.mtry=mtry))
+    rf_train = train(datos,as.factor(etiquetas),method="rf",ntree=arboles,preProcess=c("YeoJohnson","center","scale"),trControl=control,tuneGrid=expand.grid(.mtry=mtry))
     rf_error = (1-rf_train$results$Accuracy)*100
     list(arboles=arboles,error=rf_error,rf=rf_train)
 }
@@ -157,10 +156,25 @@ legend(16.5,29,c("Sin PCA","Con PCA"),lty=c(1,1),lwd=c(2.5,2.5),col=c("blue","re
 
 error_glm = ajustes_glm_sin_pca[2,glm_sin_pca_min_error_index]
 
+###############################################################################
+# Modelos no lineales
+
+control = trainControl(method = "cv", number = 10)
+
 #######################################
 # Random Forest
 
 num_arboles = seq(10,100,10)
+
+# Mediante validación cruzada obtenemos el mejor hiperparámetro número de árboles
+ajustes_rf_cv = mapply(evalua_random_forest_cv,num_arboles,MoreArgs = list(datos=datos[indices_train,],etiquetas=etiquetas[indices_train],control=control))
+rf_cv_min_error_index = which.min(unlist(ajustes_rf_cv[2,]))
+
+plot(x=num_arboles,y=ajustes_rf_cv[2,],pch=20,ylim=c(4,19),type="o",col="blue",xlab="Número de árboles",ylab="% Error de validación cruzada", main = "Comparativa de número de árboles")
+points(x=ajustes_rf_cv[1,rf_cv_min_error_index], y=ajustes_rf_cv[2,rf_cv_min_error_index], pch=19, col="orange")
+
+rf_pred_test = evaluar_modelo(ajustes_rf_cv[3,rf_cv_min_error_index]$rf,datos[-indices_train,])
+error_rf = porcentaje_error(as.numeric(rf_pred_test),etiquetas[-indices_train])
 # rf_pca = evalua_random_forest(datos_procesados,indices_train)
 # rf_sin_pca = evalua_random_forest(datos_procesados_sin_pca,indices_train)
 # 
@@ -176,17 +190,6 @@ num_arboles = seq(10,100,10)
 # points(x=ajustes_rf[1,rf_min_error_index], y=ajustes_rf[2,rf_min_error_index],pch=19,col="green")
 # legend(67,19,c("Sin PCA","Con PCA"),lty=c(1,1),lwd=c(2.5,2.5),col=c("blue","red"))
 
-# Otra forma mediante validación cruzada
-# Obtenemos el mejor hiperparámetro número de árboles
-ajustes_rf_cv = mapply(evalua_random_forest_cv,num_arboles,MoreArgs = list(datos=datos[indices_train,],etiquetas=etiquetas[indices_train],k=10,i=1))
-rf_cv_min_error_index = which.min(unlist(ajustes_rf_cv[2,]))
-
-plot(x=num_arboles,y=ajustes_rf_cv[2,],pch=20,ylim=c(4,19),type="o",col="blue",xlab="Número de árboles",ylab="% Error de validación cruzada", main = "Comparativa de número de árboles")
-points(x=ajustes_rf_cv[1,rf_cv_min_error_index], y=ajustes_rf_cv[2,rf_cv_min_error_index], pch=19, col="orange")
-
-rf_pred_test = evaluar_modelo(ajustes_rf_cv[3,rf_cv_min_error_index]$rf,datos[-indices_train,])
-error_rf = porcentaje_error(as.numeric(rf_pred_test),etiquetas[-indices_train])
-
 # Con tune
 # tuned_rf = tune.randomForest(datos[indices_train,],as.factor(etiquetas[indices_train]),mtry=sqrt(ncol(datos)),ntree=seq(10,100,10))
 # rf_pred_test = evaluar_modelo(tuned_rf$best.model,datos[-indices_train,])
@@ -195,22 +198,20 @@ error_rf = porcentaje_error(as.numeric(rf_pred_test),etiquetas[-indices_train])
 #######################################
 # Adaboost
 
-datos_prueba = cbind(datos,as.factor(etiquetas))
-colnames(datos_prueba)[ncol(datos_prueba)] = "etiquetas"
-grid <- expand.grid(maxdepth=1, iter=c(20,30,40,50,60,70,80,90,100), nu =c(0.05,0.1,0.15,0.2))
-control = trainControl(method = "cv", number = 10)
-fit = train(etiquetas ~ ., data = datos_prueba[indices_train,], method = "ada", trControl = control, preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid, control = rcontrol)
-ada_pred = predict(fit, datos_prueba[-indices_train,])
-porcentaje_error(as.numeric(ada_pred), etiquetas[-indices_train])
+grid = expand.grid(maxdepth=1, iter=c(20,30,40,50,60,70,80,90,100), nu=c(0.15,0.2,0.25,0.3))
+rcontrol = rpart.control(maxdepth=1,cp=-1,minsplit=0)
+ada_fit = train(x = datos[indices_train,], y = as.factor(etiquetas[indices_train]),method = "ada", trControl = control, preProcess = c("YeoJohnson","center","scale"),tuneGrid = grid, control = rcontrol)
+ada_pred = predict(ada_fit, datos[-indices_train,])
+error_ada = porcentaje_error(as.numeric(ada_pred), etiquetas[-indices_train])
 
-arboles_nu = fit$result[which(fit$results[,1] == 0.05)[which.max(fit$results[fit$results[,1] == 0.05,4])],3]
-arboles_nu = c(arboles_nu,fit$result[which(fit$results[,1] == 0.1)[which.max(fit$results[fit$results[,1] == 0.1,4])],3])
-arboles_nu = c(arboles_nu,fit$result[which(fit$results[,1] == 0.15)[which.max(fit$results[fit$results[,1] == 0.15,4])],3])
-arboles_nu = c(arboles_nu,fit$result[which(fit$results[,1] == 0.2)[which.max(fit$results[fit$results[,1] == 0.2,4])],3])
-datos_nu = c(0.05, max(fit$results[fit$results[,1] == 0.05,4]))
-datos_nu = rbind(datos_nu,c(0.1, max(fit$results[fit$results[,1] == 0.1,4])))
-datos_nu = rbind(datos_nu,c(0.15, max(fit$results[fit$results[,1] == 0.15,4])))
-datos_nu = rbind(datos_nu,c(0.2, max(fit$results[fit$results[,1] == 0.2,4])))
+arboles_nu = ada_fit$result[which(ada_fit$results[,1] == 0.15)[which.max(ada_fit$results[ada_fit$results[,1] == 0.15,4])],3]
+arboles_nu = c(arboles_nu,ada_fit$result[which(ada_fit$results[,1] == 0.2)[which.max(ada_fit$results[ada_fit$results[,1] == 0.2,4])],3])
+arboles_nu = c(arboles_nu,ada_fit$result[which(ada_fit$results[,1] == 0.25)[which.max(ada_fit$results[ada_fit$results[,1] == 0.25,4])],3])
+arboles_nu = c(arboles_nu,ada_fit$result[which(ada_fit$results[,1] == 0.3)[which.max(ada_fit$results[ada_fit$results[,1] == 0.3,4])],3])
+datos_nu = c(0.15, max(ada_fit$results[ada_fit$results[,1] == 0.15,4]))
+datos_nu = rbind(datos_nu,c(0.2, max(ada_fit$results[ada_fit$results[,1] == 0.2,4])))
+datos_nu = rbind(datos_nu,c(0.25, max(ada_fit$results[ada_fit$results[,1] == 0.25,4])))
+datos_nu = rbind(datos_nu,c(0.3, max(ada_fit$results[ada_fit$results[,1] == 0.3,4])))
 
-plot(datos_nu, pch = 20, ylab = "Precisión", xlab = "Coeficiente de aprendizaje", col = "blue", type = "o")
-text(x = datos_nu[,1], y = datos_nu[,2] , labels = arboles_nu, cex = 0.7, pos = 3)
+plot(datos_nu, pch = 20, ylab = "Precisión", xlab = "Coeficiente de aprendizaje", xlim = c(0.13,0.32),col = "blue", type = "o")
+text(x = datos_nu[,1], y = datos_nu[,2] , labels = arboles_nu, cex = 0.7, pos = 2)
