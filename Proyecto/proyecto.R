@@ -191,3 +191,26 @@ error_rf = porcentaje_error(as.numeric(rf_pred_test),etiquetas[-indices_train])
 # tuned_rf = tune.randomForest(datos[indices_train,],as.factor(etiquetas[indices_train]),mtry=sqrt(ncol(datos)),ntree=seq(10,100,10))
 # rf_pred_test = evaluar_modelo(tuned_rf$best.model,datos[-indices_train,])
 # error_rf = porcentaje_error(as.numeric(rf_pred_test),etiquetas[-indices_train])
+
+#######################################
+# Adaboost
+
+datos_prueba = cbind(datos,as.factor(etiquetas))
+colnames(datos_prueba)[ncol(datos_prueba)] = "etiquetas"
+grid <- expand.grid(maxdepth=1, iter=c(20,30,40,50,60,70,80,90,100), nu =c(0.05,0.1,0.15,0.2))
+control = trainControl(method = "cv", number = 10)
+fit = train(etiquetas ~ ., data = datos_prueba[indices_train,], method = "ada", trControl = control, preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid, control = rcontrol)
+ada_pred = predict(fit, datos_prueba[-indices_train,])
+porcentaje_error(as.numeric(ada_pred), etiquetas[-indices_train])
+
+arboles_nu = fit$result[which(fit$results[,1] == 0.05)[which.max(fit$results[fit$results[,1] == 0.05,4])],3]
+arboles_nu = c(arboles_nu,fit$result[which(fit$results[,1] == 0.1)[which.max(fit$results[fit$results[,1] == 0.1,4])],3])
+arboles_nu = c(arboles_nu,fit$result[which(fit$results[,1] == 0.15)[which.max(fit$results[fit$results[,1] == 0.15,4])],3])
+arboles_nu = c(arboles_nu,fit$result[which(fit$results[,1] == 0.2)[which.max(fit$results[fit$results[,1] == 0.2,4])],3])
+datos_nu = c(0.05, max(fit$results[fit$results[,1] == 0.05,4]))
+datos_nu = rbind(datos_nu,c(0.1, max(fit$results[fit$results[,1] == 0.1,4])))
+datos_nu = rbind(datos_nu,c(0.15, max(fit$results[fit$results[,1] == 0.15,4])))
+datos_nu = rbind(datos_nu,c(0.2, max(fit$results[fit$results[,1] == 0.2,4])))
+
+plot(datos_nu, pch = 20, ylab = "Precisión", xlab = "Coeficiente de aprendizaje", col = "blue", type = "o")
+text(x = datos_nu[,1], y = datos_nu[,2] , labels = arboles_nu, cex = 0.7, pos = 3)
