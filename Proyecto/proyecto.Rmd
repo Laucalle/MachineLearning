@@ -25,6 +25,8 @@ library("e1071", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
 library("glmnet", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
 library("ROCR", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
 library("leaps", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
+library("randomForest", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
+library("ada", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
 ```
 
 ```{r,echo=FALSE}
@@ -53,7 +55,7 @@ preprocesar_datos = function(datos,indices_train,metodos,umbral_varianza=0.9){
 }
 
 # Evalúa la regresión para unos datos
-evaluar_regresion = function(regresion,datos){
+evaluar_modelo = function(regresion,datos){
     
     predict(regresion,datos) # Los datos no deben incluir las etiquetas
     
@@ -81,14 +83,14 @@ categorizar = function(clasificados,umbral=0.5){
 # Evalúa una regresión lineal dada una fórmula y unos datos de entrenamiento 
 evalua_lm = function(formula,datos,subconjunto,fp=1,fn=1){
     reg_lin = do.call("lm", list(formula=formula, data=substitute(datos), subset=substitute(subconjunto)))
-    prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
+    prediccion_test = evaluar_modelo(reg_lin,datos[-subconjunto,-ncol(datos)])
     porc_error = porcentaje_error(categorizar(prediccion_test),datos[-subconjunto,ncol(datos)],fp,fn)
     list(formula=formula, error = porc_error)
 }
 
 evalua_glm = function(formula,datos,subconjunto,fp=1,fn=1,familia=binomial()){
     reg_lin = do.call("glm", list(formula=formula, data=substitute(datos), subset=substitute(subconjunto),familia))
-    prediccion_test = evaluar_regresion(reg_lin,datos[-subconjunto,-ncol(datos)])
+    prediccion_test = evaluar_modelo(reg_lin,datos[-subconjunto,-ncol(datos)])
     porc_error = porcentaje_error(categorizar(prediccion_test),datos[-subconjunto,ncol(datos)],fp,fn)
     list(formula=formula, error=porc_error,reg=reg_lin)
 }
@@ -282,3 +284,132 @@ legend(16.5,29,c("Sin PCA","Con PCA"),lty=c(1,1),lwd=c(2.5,2.5),col=c("blue","re
 El punto señalado en verde nos indica el conjunto de predictores cuyo error ha sido menor (8.48\%) para los datos con análisis de componentes principales. Análogamente, el punto naranja señala el conjunto de características que ha dado menor error (4.59\%) para los datos sin PCA.
 
 Ya que hemos conseguido no sólo reducir el número de predictores necesarios (de 28 a 13) sino también el error, vamos a elegir el modelo que proporciona un 4.59\% de error para futuras comparaciones con modelos no lineales.
+
+\newpage
+
+## Modelos no lineales
+
+Procediendo de forma similar, analizaremos varios modelos no lineales utilizando los dos conjuntos de características obtenidos en la sección de preprocesamiento de datos. Antes de empezar, es preciso apuntar que los ajustes lineales anteriores han obtenido errores bastante bajos, por lo que la complejidad adicional introducida por las técnicas que veremos a continuación deberá tener asociado un error aún más bajo que la justifique.
+
+Para automatizar la optimización de hiperparámetros mediante validación cruzada utilizaremos las funcionalidades proporcionadas por el paquete \texttt{caret}; en concreto, la función \texttt{train}. Esto se explorará con mayor profundidad en los apartados dedicados a cada tipo de modelo.
+
+### _Random Forest_
+
+```{r,echo=FALSE}
+evalua_random_forest_cv = function(datos,etiquetas,arboles=100,k=10,i=1,metodo="cv"){
+    mtry = sqrt(ncol(datos))
+    rf_train_control = trainControl(method=metodo,number=k,repeats=i)
+    rf_train = train(datos,as.factor(etiquetas),method="rf",ntree=arboles,preProcess=c("YeoJohnson","center","scale"),trControl=rf_train_control,tuneGrid=expand.grid(.mtry=mtry))
+    rf_error = (1-rf_train$results$Accuracy)*100
+    list(arboles=arboles,error=rf_error,rf=rf_train)
+}
+```
+
+El primer modelo no lineal que vamos a estudiar será _Random Forest_. Esta técnica consiste en
+entrenar un cierto número de árboles usando subconjuntos aleatorios de características para después promediar sus resultados.
+
+Partiendo del concepto de _bagging_, _Random Forest_ muestrea con reemplazo el conjunto de $n$ datos original para obtener $p$ conjuntos de un cierto tamaño $n'$ con los que ajustar $p$ árboles. Lo que diferencia estas dos técnicas es la elección de subconjuntos aleatorios de variables utilizadas en el ajuste de cada árbol que realiza _Random Forest_.
+
+Como hemos comentado, vamos a utilizar \texttt{train} para encontrar, en este caso, el número de árboles (\texttt{ntree}) más adecuado para una cantidad de variables por árbol fija.
+
+Para empezar, vamos a especificar que queremos realizar validación cruzada. Esto se hace creando un objeto \texttt{trainControl} que posteriormente \texttt{train} tomará como argumento.
+
+```{r}
+control = trainControl(method = "cv", number = 10) # 10-fold cv
+```
+
+El siguiente paso es crear un conjunto de posibles valores de \texttt{ntree}:
+
+```{r}
+num_arboles = seq(10,100,10)
+```
+
+Utilizaremos la función que se muestra a continuación para obtener el error de validación cruzada para cada uno de esos valores:
+
+```{r,cache=TRUE,fig.align='center',warning=FALSE}
+evalua_random_forest_cv = function(datos,etiquetas,control,arboles=100){
+    mtry = sqrt(ncol(datos))
+    rf_train = train(datos,as.factor(etiquetas),
+                     method="rf",ntree=arboles,
+                     preProcess=c("YeoJohnson","center","scale"),
+                     trControl=control,tuneGrid=expand.grid(.mtry=mtry))
+    rf_error = (1-rf_train$results$Accuracy)*100
+    list(arboles=arboles,error=rf_error,rf=rf_train)
+}
+
+ajustes_rf_cv = mapply(evalua_random_forest_cv,num_arboles,
+                       MoreArgs = list(datos=datos[indices_train,],
+                                       etiquetas=etiquetas[indices_train],
+                                       control=control))
+```
+
+Siguiendo las directrices del proyecto, mantendremos constante el número de variables predictoras a $\sqrt{n}$, donde $n$ es el total de características disponibles.
+
+Los parámetros principales que recibe \texttt{train} son, por este orden: los datos originales, las etiquetas, el método (en nuestro caso, _Random Forest_), el número de árboles específico y las transformaciones de preprocesamiento. Además, hemos de pasarle el objeto \texttt{control} y el número de variables definidos previamente. Finalmente, debemos tener en cuenta otros parámetros que no aparecen en el código por tener valores correctos por defecto: \texttt{replace} (muestreo con o sin reemplazo) o \texttt{sampsize} ($n'$, tamaño de los conjuntos obtenidos).
+
+Ya que vamos a realizar validación cruzada, es importante no contaminar el conjunto de datos realizando el preprocesamiento antes de crear las particiones de validación. La razón de esto es que esta técnica toma información de todos los datos a su disposición para homogeneizar los valores de las características, por lo que si preprocesamos el conjunto completo las particiones de validación no serán totalmente independientes. Es por esto que \texttt{train} aplica las transformaciones en cada iteración de la validación cruzada.
+
+Una vez obtenidos los $E_{CV}$, decidiremos qué número de árboles es el más adecuado entre los candidatos según este criterio. Esta decisión se ilustra mejor con la siguiente gráfica:
+
+\vspace{0.7cm}
+```{r,echo=FALSE}
+rf_cv_min_error_index = which.min(unlist(ajustes_rf_cv[2,]))
+
+plot(x=num_arboles,y=ajustes_rf_cv[2,],pch=20,ylim=c(4,19),type="o",col="blue",xlab="Número de árboles",ylab="% Error de validación cruzada", main = "Comparativa de número de árboles")
+points(x=ajustes_rf_cv[1,rf_cv_min_error_index], y=ajustes_rf_cv[2,rf_cv_min_error_index], pch=19, col="orange")
+```
+\vspace{0.7cm}
+
+El punto señalado en naranja indica el número de árboles con el que se ha obtenido el menor $E_{CV}$: 70. Por ello, ajustaremos un modelo con 70 árboles utilizando toda la partición de entrenamiento para posteriormente evaluar su calidad sobre la partición de test.
+
+### _Boosting_
+
+El siguiente tipo de modelo no lineal a estudiar es _Boosting_; en particular, la variante _AdaBoost_ utilizando funciones _stump_.
+
+El concepto subyacente a _Boosting_ es combinar un conjunto predefinido de clasificadores débiles, entendiendo éstos como clasificadores cuya eficacia es marginalmente superior a uno aleatorio. Para constituir el modelo complejo final, se realiza iterativamente una agregación ponderada de dichos clasificadores en función de su $E_{in}$.
+
+En nuestro caso, los clasificadores débiles que utilizaremos son denominados _stumps_, los cuales pueden ser vistos como árboles de decisión de un único nivel. La ponderación de cada _stump_ $t$ viene dada por el valor de su error $\epsilon_t$, calculado en base a una distribución $D_t$. Esta distribución confiere una importancia a cada observación, de forma que aquellas que han sido mal clasificadas durante más iteraciones tienen preferencia en las siguientes.
+
+Para la implementación vamos a utilizar de nuevo \texttt{train}; en este caso con el método \texttt{ada}. Este método tiene tres hiperparámetros: la profundidad de los árboles clasificadores simples (\texttt{maxdepth}); el número de iteraciones o, de forma equivalente, el número de clasificadores distintos(\texttt{iter}); el coeficiente de aprendizaje (\texttt{nu}).
+
+Puesto que vamos a utilizar como clasificadores débiles _stumps_, la profundidad de los árboles estará fijada a 1. Para optimizar los restantes hiperparámetros emplearemos de validación cruzada. Los valores entre los que se van a escoger son:
+
+```{r}
+grid = expand.grid(maxdepth=1, iter=c(20,30,40,50,60,70,80,90,100), 
+                   nu=c(0.15,0.2,0.25,0.3))
+# La documentación del paquete ada indica que se deben especificar además los siguientes 
+# parámetros usando rpart para la utilización de stumps.
+rcontrol = rpart.control(maxdepth=1,cp=-1,minsplit=0)
+```
+
+Una vez establecidos los valores entre los que se van a elegir los hiperparámetros, pasamos a obtener el mejor modelo y estudiar su calidad. De igual forma que en la sección anterior utlizaremos el preprocesamiento proporcionado por \texttt{train}.
+
+```{r,cache=TRUE,message=FALSE}
+ada_fit = train(x = datos[indices_train,], y = as.factor(etiquetas[indices_train]),
+                method = "ada", trControl = control, 
+                preProcess = c("YeoJohnson","center","scale"),
+                tuneGrid = grid, control = rcontrol)
+```
+
+Para cada una de las combinaciones de hiperparámetros \texttt{train} proporciona la precisión del modelo asociado. En la siguiente gráfica se muestran los valores del coeficiente de aprendizaje frente a la mayor precisión posible, junto con el número de iteraciones que se necesitaron para obtener dicho resultado.
+
+\vspace{0.7cm}
+```{r, echo=FALSE,message=FALSE,fig.align='center',fig.height=3.6,fig.width=5.3}
+ada_pred = predict(ada_fit, datos[-indices_train,])
+error_ada = porcentaje_error(as.numeric(ada_pred), etiquetas[-indices_train])
+
+arboles_nu = ada_fit$result[which(ada_fit$results[,1] == 0.15)[which.max(ada_fit$results[ada_fit$results[,1] == 0.15,4])],3]
+arboles_nu = c(arboles_nu,ada_fit$result[which(ada_fit$results[,1] == 0.2)[which.max(ada_fit$results[ada_fit$results[,1] == 0.2,4])],3])
+arboles_nu = c(arboles_nu,ada_fit$result[which(ada_fit$results[,1] == 0.25)[which.max(ada_fit$results[ada_fit$results[,1] == 0.25,4])],3])
+arboles_nu = c(arboles_nu,ada_fit$result[which(ada_fit$results[,1] == 0.3)[which.max(ada_fit$results[ada_fit$results[,1] == 0.3,4])],3])
+datos_nu = c(0.15, max(ada_fit$results[ada_fit$results[,1] == 0.15,4]))
+datos_nu = rbind(datos_nu,c(0.2, max(ada_fit$results[ada_fit$results[,1] == 0.2,4])))
+datos_nu = rbind(datos_nu,c(0.25, max(ada_fit$results[ada_fit$results[,1] == 0.25,4])))
+datos_nu = rbind(datos_nu,c(0.3, max(ada_fit$results[ada_fit$results[,1] == 0.3,4])))
+
+plot(datos_nu, pch = 20, ylab = "Precisión", xlab = "Coeficiente de aprendizaje", xlim = c(0.13,0.32),col = "blue", type = "o")
+text(x = datos_nu[,1], y = datos_nu[,2] , labels = arboles_nu, cex = 0.7, pos = 2)
+```
+\vspace{0.7cm}
+
+Como podemos observar, la mayor precisión se obtiene con un coeficiente de aprendizaje igual a 0.3 con 70 iteraciones; por ello, éste sería el modelo a elegir en principio.
