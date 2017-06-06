@@ -164,6 +164,7 @@ control = trainControl(method = "cv", number = 10)
 #######################################
 # Random Forest
 
+set.seed(111)
 num_arboles = seq(10,100,10)
 
 # Mediante validación cruzada obtenemos el mejor hiperparámetro número de árboles
@@ -198,6 +199,7 @@ error_rf = porcentaje_error(as.numeric(rf_pred_test),etiquetas[-indices_train])
 #######################################
 # Adaboost
 
+set.seed(111)
 grid = expand.grid(maxdepth=1, iter=c(20,30,40,50,60,70,80,90,100), nu=c(0.15,0.2,0.25,0.3))
 rcontrol = rpart.control(maxdepth=1,cp=-1,minsplit=0)
 ada_fit = train(x = datos[indices_train,], y = as.factor(etiquetas[indices_train]),method = "ada", trControl = control, preProcess = c("YeoJohnson","center","scale"),tuneGrid = grid, control = rcontrol)
@@ -215,3 +217,25 @@ datos_nu = rbind(datos_nu,c(0.3, max(ada_fit$results[ada_fit$results[,1] == 0.3,
 
 plot(datos_nu, pch = 20, ylab = "Precisión", xlab = "Coeficiente de aprendizaje", xlim = c(0.13,0.32),col = "blue", type = "o")
 text(x = datos_nu[,1], y = datos_nu[,2] , labels = arboles_nu, cex = 0.7, pos = 2)
+
+#######################################
+# Support Vector Machines
+set.seed(111)
+grid = expand.grid(C=seq(1,5,1), sigma=seq(0.02, 0.04, 0.005 ))
+svm_fit = train(x = datos[indices_train,], y = as.factor(etiquetas[indices_train]),method = "svmRadial", trControl = control, preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
+svm_pred = predict(svm_fit, datos[-indices_train,])
+error_svm = porcentaje_error(as.numeric(svm_pred), etiquetas[-indices_train])
+
+c_sigma = svm_fit$result[which(svm_fit$results[,2] == 0.02)[which.max(svm_fit$results[svm_fit$results[,2] == 0.02,3])],1]
+c_sigma = c(c_sigma,svm_fit$result[which(svm_fit$results[,2] == 0.025)[which.max(svm_fit$results[svm_fit$results[,2] == 0.025,3])],1])
+c_sigma = c(c_sigma,svm_fit$result[which(svm_fit$results[,2] == 0.03)[which.max(svm_fit$results[svm_fit$results[,2] == 0.03,3])],1])
+c_sigma = c(c_sigma,svm_fit$result[which(svm_fit$results[,2] == 0.035)[which.max(svm_fit$results[svm_fit$results[,2] == 0.035,3])],1])
+c_sigma = c(c_sigma,svm_fit$result[which(svm_fit$results[,2] == 0.04)[which.max(svm_fit$results[svm_fit$results[,2] == 0.04,3])],1])
+datos_sigma = c(0.02, max(svm_fit$results[svm_fit$results[,2] == 0.02,3]))
+datos_sigma = rbind(datos_sigma,c(0.025, max(svm_fit$results[svm_fit$results[,2] == 0.025,3])))
+datos_sigma = rbind(datos_sigma,c(0.03, max(svm_fit$results[svm_fit$results[,2] == 0.03,3])))
+datos_sigma = rbind(datos_sigma,c(0.035, max(svm_fit$results[svm_fit$results[,2] == 0.035,3])))
+datos_sigma = rbind(datos_sigma,c(0.04, max(svm_fit$results[svm_fit$results[,2] == 0.04,3])))
+
+plot(datos_sigma, pch = 20, ylab = "Precisión", xlab = "Sigma", xlim = c(0.018,0.042),col = "blue", type = "o")
+text(x = datos_sigma[,1], y = datos_sigma[,2] , labels = c_sigma, cex = 0.7, pos = 2)
