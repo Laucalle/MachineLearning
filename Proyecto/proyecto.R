@@ -159,7 +159,6 @@ error_glm = ajustes_glm_sin_pca[2,glm_sin_pca_min_error_index]
 ###############################################################################
 # Modelos no lineales
 
-net = neuralnet(etiquetas~FSW.1+SSW.1+BPC.1+BPW.1+TPW.1+FSP.2+FSW.2+SSP.2+SSW.2+BPC.2,data=datos_nn[indices_train,],hidden=layers)
 control = trainControl(method = "cv", number = 10)
 
 #######################################
@@ -223,7 +222,7 @@ text(x = datos_nu[,1], y = datos_nu[,2] , labels = arboles_nu, cex = 0.7, pos = 
 # Support Vector Machines
 set.seed(111)
 grid = expand.grid(C=seq(1,5,1), sigma=seq(0.02, 0.04, 0.005))
-svm_fit = train(x = datos[indices_train,], y = as.factor(etiquetas[indices_train]),method = "svmRadial", trControl = control, preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
+svm_fit = train(x = datos[indices_train,], y = as.factor(etiquetas[indices_train]),method = "svmRadial", trControl = control, prob.model = TRUE, preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
 svm_pred = predict(svm_fit, datos[-indices_train,])
 error_svm = porcentaje_error(as.numeric(svm_pred), etiquetas[-indices_train])
 
@@ -244,16 +243,45 @@ text(x = datos_sigma[,1], y = datos_sigma[,2] , labels = c_sigma, cex = 0.7, pos
 #######################################
 # Neural Networks
 
-layers = c(3,3)
-datos_nn = cbind(datos,etiquetas)
-colnames(datos_nn)[ncol(datos_nn)] = "etiquetas"
-formula_nn = paste("etiquetas~",paste(colnames(datos),collapse = "+"))
-net = neuralnet(formula_nn,data=datos_nn[indices_train,],hidden=layers,linear.output=FALSE)
-prediccion = compute(net,datos[-indices_train,])
-porcentaje_error(categorizar(prediccion$net.result),etiquetas[-indices_train])
+# layers = c(3,3)
+# datos_nn = cbind(datos,etiquetas)
+# colnames(datos_nn)[ncol(datos_nn)] = "etiquetas"
+# formula_nn = paste("etiquetas~",paste(colnames(datos),collapse = "+"))
+# net = neuralnet(formula_nn,data=datos_nn[indices_train,],hidden=layers,linear.output=FALSE)
+# prediccion = compute(net,datos[-indices_train,])
+# porcentaje_error(categorizar(prediccion$net.result),etiquetas[-indices_train])
+# 
+# set.seed(111)
+# grid = expand.grid(layer1=c(seq(1,50,3),50), layer2=0, layer3=0)
+# nn_fit_una = train(x = datos[indices_train,], y = etiquetas[indices_train],method = "neuralnet", linear.output=FALSE, trControl = control, preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
+# grid = expand.grid(layer1=c(seq(1,50,5),50), layer2=seq(0,50,5), layer3=0)
+# nn_fit_dos = train(x = datos[indices_train,], y = etiquetas[indices_train],method = "neuralnet", linear.output=FALSE, trControl = control, preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
+# grid = expand.grid(layer1=c(seq(1,50,10),50), layer2=seq(0,50,10), layer3=seq(0,50,10))
+# nn_fit_tres = train(x = datos[indices_train,], y = etiquetas[indices_train],method = "neuralnet", linear.output=FALSE, trControl = control, preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
 
-set.seed(111)
-grid = expand.grid(layer1=c(seq(1,50,5),50), layer2=0, layer3=0)
-nn_fit_una = train(x = datos[indices_train,], y = etiquetas[indices_train],method = "neuralnet", linear.output=FALSE, trControl = control, preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
-grid = expand.grid(layer1=c(seq(1,50,10),50), layer2=seq(0,50,10), layer3=0)
-nn_fit_dos = train(x = datos[indices_train,], y = etiquetas[indices_train],method = "neuralnet", linear.output=FALSE, trControl = control, preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
+###############################################################################
+# Curvas ROC
+
+calcula_curva_roc = function(pred,truth){
+    predob = prediction(pred,truth)
+    area = performance(predob,"auc")
+    curva = performance(predob,"tpr","fpr")
+    list(curva=curva,area=area)
+}
+
+# Curva ROC regresión logística
+modelo_glm = ajustes_glm_sin_pca[3,glm_sin_pca_min_error_index]
+eval_glm = unlist(evaluar_modelo(modelo_glm,datos_procesados_sin_pca[-indices_train,]))
+roc_glm = calcula_curva_roc(eval_glm,etiquetas[-indices_train])
+# Curva ROC Random Forest
+modelo_rf = ajustes_rf_cv[3,rf_cv_min_error_index]
+eval_rf = predict(modelo_rf,datos[-indices_train,],type="prob")$rf[,2]
+roc_rf = calcula_curva_roc(eval_rf,etiquetas[-indices_train])
+# Curva ROC AdaBoost
+modelo_ada = ada_fit
+eval_ada = predict(modelo_ada,datos[-indices_train,],type="prob")[,2]
+roc_ada = calcula_curva_roc(eval_ada,etiquetas[-indices_train])
+# Curva ROC Support Vector Machines
+modelo_svm = svm_fit
+eval_svm = predict(modelo_svm,datos[-indices_train,],type="prob")[,2]
+roc_svm = calcula_curva_roc(eval_svm,etiquetas[-indices_train])
