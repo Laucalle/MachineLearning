@@ -159,6 +159,7 @@ error_glm = ajustes_glm_sin_pca[2,glm_sin_pca_min_error_index]
 ###############################################################################
 # Modelos no lineales
 
+net = neuralnet(etiquetas~FSW.1+SSW.1+BPC.1+BPW.1+TPW.1+FSP.2+FSW.2+SSP.2+SSW.2+BPC.2,data=datos_nn[indices_train,],hidden=layers)
 control = trainControl(method = "cv", number = 10)
 
 #######################################
@@ -239,3 +240,20 @@ datos_sigma = rbind(datos_sigma,c(0.04, max(svm_fit$results[svm_fit$results[,2] 
 
 plot(datos_sigma, pch = 20, ylab = "Precisión", xlab = "Sigma", xlim = c(0.018,0.042),col = "blue", type = "o")
 text(x = datos_sigma[,1], y = datos_sigma[,2] , labels = c_sigma, cex = 0.7, pos = 2)
+
+#######################################
+# Neural Networks
+
+layers = c(3,3)
+datos_nn = cbind(datos,etiquetas)
+colnames(datos_nn)[ncol(datos_nn)] = "etiquetas"
+formula_nn = paste("etiquetas~",paste(colnames(datos),collapse = "+"))
+net = neuralnet(formula_nn,data=datos_nn[indices_train,],hidden=layers,linear.output=FALSE)
+prediccion = compute(net,datos[-indices_train,])
+porcentaje_error(categorizar(prediccion$net.result),etiquetas[-indices_train])
+
+set.seed(111)
+grid = expand.grid(layer1=c(seq(1,50,5),50), layer2=0, layer3=0)
+nn_fit_una = train(x = datos[indices_train,], y = etiquetas[indices_train],method = "neuralnet", linear.output=FALSE, trControl = control, preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
+grid = expand.grid(layer1=c(seq(1,50,10),50), layer2=seq(0,50,10), layer3=0)
+nn_fit_dos = train(x = datos[indices_train,], y = etiquetas[indices_train],method = "neuralnet", linear.output=FALSE, trControl = control, preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
