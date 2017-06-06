@@ -10,7 +10,7 @@ output:
         includes:
             in_header: header.tex
             before_body: titlepage.tex
-    
+#bibliography: .bib
 ---
 
 ```{r setup, include=FALSE}
@@ -20,6 +20,7 @@ knitr::opts_chunk$set(echo = TRUE)
 \newpage
 
 ```{r,echo=FALSE,message=FALSE}
+library("neuralnet", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
 library("caret", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
 library("e1071", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
 library("glmnet", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
@@ -27,6 +28,7 @@ library("ROCR", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
 library("leaps", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
 library("randomForest", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
 library("ada", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
+library("kernlab", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
 ```
 
 ```{r,echo=FALSE}
@@ -303,6 +305,7 @@ evalua_random_forest_cv = function(datos,etiquetas,arboles=100,k=10,i=1,metodo="
     rf_error = (1-rf_train$results$Accuracy)*100
     list(arboles=arboles,error=rf_error,rf=rf_train)
 }
+set.seed(111)
 ```
 
 El primer modelo no lineal que vamos a estudiar será _Random Forest_. Esta técnica consiste en
@@ -360,7 +363,7 @@ points(x=ajustes_rf_cv[1,rf_cv_min_error_index], y=ajustes_rf_cv[2,rf_cv_min_err
 ```
 \vspace{0.7cm}
 
-El punto señalado en naranja indica el número de árboles con el que se ha obtenido el menor $E_{CV}$: 70. Por ello, ajustaremos un modelo con 70 árboles utilizando toda la partición de entrenamiento para posteriormente evaluar su calidad sobre la partición de test.
+El punto señalado en naranja indica el número de árboles con el que se ha obtenido el menor $E_{CV}$: 60. Por ello, ajustaremos un modelo con 60 árboles utilizando toda la partición de entrenamiento para posteriormente evaluar su calidad sobre la partición de test.
 
 ### _Boosting_
 
@@ -375,6 +378,7 @@ Para la implementación vamos a utilizar de nuevo \texttt{train}; en este caso c
 Puesto que vamos a utilizar como clasificadores débiles _stumps_, la profundidad de los árboles estará fijada a 1. Para optimizar los restantes hiperparámetros emplearemos de validación cruzada. Los valores entre los que se van a escoger son:
 
 ```{r}
+set.seed(111)
 grid = expand.grid(maxdepth=1, iter=c(20,30,40,50,60,70,80,90,100), 
                    nu=c(0.15,0.2,0.25,0.3))
 # La documentación del paquete ada indica que se deben especificar además los siguientes 
@@ -412,4 +416,55 @@ text(x = datos_nu[,1], y = datos_nu[,2] , labels = arboles_nu, cex = 0.7, pos = 
 ```
 \vspace{0.7cm}
 
-Como podemos observar, la mayor precisión se obtiene con un coeficiente de aprendizaje igual a 0.3 con 70 iteraciones; por ello, éste sería el modelo a elegir en principio.
+Como podemos observar, la mayor precisión se obtiene con un coeficiente de aprendizaje igual a 0.25 con 60 iteraciones; por ello, éste sería el modelo a elegir en principio.
+
+### _Support Vector Machines_
+
+El tercer modelo a estudiar será _SVM_. Frente a modelos lineales como el perceptrón o las regresiones, _SVM_ busca construir un separador con mayor poder de generalización; logra esto buscando un separador cuya separación (margen) respecto a los puntos más cercanos (vectores de soporte) sea máxima. El razonamiento subyacente se basa en que los nuevos datos que debamos clasificar serán presumiblemente similares a los de entrenamiento; por lo tanto, si nuestro clasificador se acerca demasiado a algunos puntos, hay cierta probabilidad de que una nueva observación cercana a ellos sea etiquetada de forma incorrecta.
+
+Análogamente a los modelos lineales mencionados, _SVM_ tiene su propia forma de tratar con datos no linealmente separables: los _kernels_. Un _kernel_ es una función que determina la similitud entre dos observaciones de forma equivalente a medir la distancia entre ellas en un espacio diferente al original. Nosotros usaremos el _kernel RBF_ gaussiano, que tiene un hiperparámetro $\gamma$ a ajustar. En el paquete \texttt{kernlab} que hemos utilizado a través de \texttt{train} este hiperparámetro es llamado $\sigma$.
+
+Además, ya que los datos en la mayoría de los casos no son linealmente separables, \texttt{kernlab} nos permite ajustar el parámetro _C_, que controla la complejidad del modelo de forma similar a la regularización; en este caso, valores altos significan hipótesis más elaboradas que minimicen el error $\xi$ de cada punto (distancia al margen de su clase correcta; $\xi = 0$ si es un vector de soporte o está bien clasificado más allá de su margen; $0 < \xi < 2$ si está dentro de alguno de los dos márgenes; $\xi \geq 2$ si está mal clasificado más allá del margen opuesto).
+
+Por medio de validación cruzada estimaremos los parámetros _C_ y $\sigma$ para el modelo que nos ocupa. Como en las secciones anteriores, se realizarán 10 particiones de validación. Los valores entre los que se elegirán se definen en la siguiente línea de código:
+
+```{r, echo=FALSE}
+set.seed(111)
+```
+
+```{r}
+grid = expand.grid(C=seq(1,5,1), sigma=seq(0.02, 0.04, 0.005))
+```
+
+Una vez hecho esto, veamos la llamada correspondiente a la función \texttt{train}. El método a utilizar es \texttt{svmRadial}; el resto de los parámetros se han comentado en modelos anteriores.
+
+```{r,cache=TRUE,warning=FALSE}
+svm_fit = train(x = datos[indices_train,], y = as.factor(etiquetas[indices_train]),
+                method = "svmRadial", trControl = control,
+                preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
+```
+
+Finalmente, vamos a analizar la máxima precisión posible con cada valor de $\sigma$, junto con sus valores de _C_ asociados:
+
+\vspace{0.7cm}
+```{r,echo=FALSE,fig.align='center',fig.height=3.6,fig.width=5.3}
+svm_pred = predict(svm_fit, datos[-indices_train,])
+error_svm = porcentaje_error(as.numeric(svm_pred), etiquetas[-indices_train])
+
+c_sigma = svm_fit$result[which(svm_fit$results[,2] == 0.02)[which.max(svm_fit$results[svm_fit$results[,2] == 0.02,3])],1]
+c_sigma = c(c_sigma,svm_fit$result[which(svm_fit$results[,2] == 0.025)[which.max(svm_fit$results[svm_fit$results[,2] == 0.025,3])],1])
+c_sigma = c(c_sigma,svm_fit$result[which(svm_fit$results[,2] == 0.03)[which.max(svm_fit$results[svm_fit$results[,2] == 0.03,3])],1])
+c_sigma = c(c_sigma,svm_fit$result[which(svm_fit$results[,2] == 0.035)[which.max(svm_fit$results[svm_fit$results[,2] == 0.035,3])],1])
+c_sigma = c(c_sigma,svm_fit$result[which(svm_fit$results[,2] == 0.04)[which.max(svm_fit$results[svm_fit$results[,2] == 0.04,3])],1])
+datos_sigma = c(0.02, max(svm_fit$results[svm_fit$results[,2] == 0.02,3]))
+datos_sigma = rbind(datos_sigma,c(0.025, max(svm_fit$results[svm_fit$results[,2] == 0.025,3])))
+datos_sigma = rbind(datos_sigma,c(0.03, max(svm_fit$results[svm_fit$results[,2] == 0.03,3])))
+datos_sigma = rbind(datos_sigma,c(0.035, max(svm_fit$results[svm_fit$results[,2] == 0.035,3])))
+datos_sigma = rbind(datos_sigma,c(0.04, max(svm_fit$results[svm_fit$results[,2] == 0.04,3])))
+
+plot(datos_sigma, pch = 20, ylab = "Precisión", xlab = "Sigma", xlim = c(0.018,0.042),col = "blue", type = "o")
+text(x = datos_sigma[,1], y = datos_sigma[,2] , labels = c_sigma, cex = 0.7, pos = 2)
+```
+\vspace{0.7cm}
+
+Como se puede apreciar en la gráfica anterior, la mayor precisión (alternativamente, el menor error) de validación cruzada se obtiene con $\sigma = 0.04$ y $C = 5$. Esta combinación de hiperparámetros será, pues, la elegida. 
