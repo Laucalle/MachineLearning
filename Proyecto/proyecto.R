@@ -221,7 +221,7 @@ text(x = datos_nu[,1], y = datos_nu[,2] , labels = arboles_nu, cex = 0.7, pos = 
 #######################################
 # Support Vector Machines
 set.seed(111)
-grid = expand.grid(C=seq(1,5,1), sigma=seq(0.02, 0.04, 0.005 ))
+grid = expand.grid(C=seq(1,5,1), sigma=seq(0.02, 0.04, 0.005))
 svm_fit = train(x = datos[indices_train,], y = as.factor(etiquetas[indices_train]),method = "svmRadial", trControl = control, preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
 svm_pred = predict(svm_fit, datos[-indices_train,])
 error_svm = porcentaje_error(as.numeric(svm_pred), etiquetas[-indices_train])
