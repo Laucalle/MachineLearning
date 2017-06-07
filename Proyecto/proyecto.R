@@ -273,15 +273,23 @@ calcula_curva_roc = function(pred,truth){
 modelo_glm = ajustes_glm_sin_pca[3,glm_sin_pca_min_error_index]
 eval_glm = unlist(evaluar_modelo(modelo_glm,datos_procesados_sin_pca[-indices_train,]))
 roc_glm = calcula_curva_roc(eval_glm,etiquetas[-indices_train])
+plot(roc_glm$curva)
+area_roc_glm = roc_glm$area@y.values
 # Curva ROC Random Forest
 modelo_rf = ajustes_rf_cv[3,rf_cv_min_error_index]
 eval_rf = predict(modelo_rf,datos[-indices_train,],type="prob")$rf[,2]
 roc_rf = calcula_curva_roc(eval_rf,etiquetas[-indices_train])
+plot(roc_rf$curva)
+area_roc_rf = roc_rf$area@y.values
 # Curva ROC AdaBoost
 modelo_ada = ada_fit
 eval_ada = predict(modelo_ada,datos[-indices_train,],type="prob")[,2]
 roc_ada = calcula_curva_roc(eval_ada,etiquetas[-indices_train])
+plot(roc_ada$curva)
+area_roc_ada = roc_ada$area@y.values
 # Curva ROC Support Vector Machines
 modelo_svm = svm_fit
 eval_svm = predict(modelo_svm,datos[-indices_train,],type="prob")[,2]
 roc_svm = calcula_curva_roc(eval_svm,etiquetas[-indices_train])
+plot(roc_svm$curva)
+area_roc_svm = roc_svm$area@y.values
