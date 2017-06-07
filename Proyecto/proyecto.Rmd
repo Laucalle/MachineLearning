@@ -10,7 +10,7 @@ output:
         includes:
             in_header: header.tex
             before_body: titlepage.tex
-#bibliography: .bib
+#bibliography: citas.bib
 ---
 
 ```{r setup, include=FALSE}
@@ -138,6 +138,8 @@ Para la realización de este trabajo se ha empleado la base de datos _Tennis Maj
 Esta base de datos contiene valores perdidos. No obstante, todos ellos representan cantidades que se pueden sustituir por cero de forma segura ya que denotan, por ejemplo, ausencia de errores no forzados, ausencia de _aces_ o sets no jugados (por abandono o por no ser necesarios).
 
 Debido a que este conjunto de datos no tiene una variable de respuesta definida explícitamente, vamos a elegir una: el resultado del partido. Para que la predicción no sea trivial, es necesario eliminar algunas características que permiten determinar unívocamente el resultado, como el número de sets ganados por cada jugador y la puntuación dentro de los mismos. Además, por la naturaleza del dominio del problema, aprovecharemos que se nos proporciona implícitamente el tipo de pista en el que se han jugado los partidos para considerarlo como una característica más. Una vez realizado todo esto, comprobaremos así si es factible utilizar el resto de los predictores con el mismo propósito.
+
+Un aspecto a tener en cuenta es el sesgo del propio conjunto de datos, provocado por la forma de construir las observaciones. Al ser la asignación de *Jugador 1* y *Jugador 2* arbitraria, de forma implícita se está favoreciendo que el mismo estadístico para un jugador tenga más importancia que para otro. Nosotros, por conocimiento general de este problema, sabemos que no importa en qué orden los nombremos; sin embargo, los modelos no tienen esta información y pueden llegar a conclusiones sesgadas basadas en este orden. Por ejemplo, para un mismo partido, la observación en la que el primer jugador comete 10 dobles faltas y el segundo comete 5 es equivalente a la observación en la que el primer jugador comete 5 dobles faltas y el segundo 10, ya que los jugadores son intercambiables. Un modelo no tiene esta información intuitiva y, por tanto, podría dar importancias distintas a variables en teoría simétricas.
 
 En cuanto a la división en conjuntos de entrenamiento y test, no se nos proporciona un criterio de antemano, por lo que en principio la realizaremos nosotros tomando observaciones aleatorias según la proporción 70\%-30\%.
 
@@ -324,12 +326,12 @@ control = trainControl(method = "cv", number = 10) # 10-fold cv
 El siguiente paso es crear un conjunto de posibles valores de \texttt{ntree}:
 
 ```{r}
-num_arboles = seq(10,100,10)
+num_arboles = seq(50,500,5)
 ```
 
 Utilizaremos la función que se muestra a continuación para obtener el error de validación cruzada para cada uno de esos valores:
 
-```{r,cache=TRUE,fig.align='center',warning=FALSE}
+```{r ajustes_rf_cv, fig.align='center', warning=FALSE, cache=TRUE}
 evalua_random_forest_cv = function(datos,etiquetas,control,arboles=100){
     mtry = sqrt(ncol(datos))
     rf_train = train(datos,as.factor(etiquetas),
@@ -363,7 +365,16 @@ points(x=ajustes_rf_cv[1,rf_cv_min_error_index], y=ajustes_rf_cv[2,rf_cv_min_err
 ```
 \vspace{0.7cm}
 
-El punto señalado en naranja indica el número de árboles con el que se ha obtenido el menor $E_{CV}$: 60. Por ello, ajustaremos un modelo con 60 árboles utilizando toda la partición de entrenamiento para posteriormente evaluar su calidad sobre la partición de test.
+El punto señalado en naranja indica el número de árboles con el que se ha obtenido el menor $E_{CV}$: 465. Por ello, ajustaremos un modelo con 465 árboles utilizando toda la partición de entrenamiento para posteriormente evaluar su calidad sobre la partición de test.
+
+Para finalizar, veamos cómo ha evolucionado el error de este modelo conforme aumenta su número de árboles:
+
+\vspace{0.7cm}
+```{r,echo=FALSE,fig.align='center'}
+plot(ajustes_rf_cv[3,rf_cv_min_error_index]$rf$finalModel,lty=1,main="Evolución del mejor Random Forest")
+legend(290,0.25,c("Error Out Of Bag","Error clase 1","Error clase 0"),lty=c(1,1),lwd=c(2.5,2.5),col=c("black","green","red"))
+```
+\vspace{0.7cm}
 
 ### _Boosting_
 
@@ -373,13 +384,13 @@ El concepto subyacente a _Boosting_ es combinar un conjunto predefinido de clasi
 
 En nuestro caso, los clasificadores débiles que utilizaremos son denominados _stumps_, los cuales pueden ser vistos como árboles de decisión de un único nivel. La ponderación de cada _stump_ $t$ viene dada por el valor de su error $\epsilon_t$, calculado en base a una distribución $D_t$. Esta distribución confiere una importancia a cada observación, de forma que aquellas que han sido mal clasificadas durante más iteraciones tienen preferencia en las siguientes.
 
-Para la implementación vamos a utilizar de nuevo \texttt{train}; en este caso con el método \texttt{ada}. Este método tiene tres hiperparámetros: la profundidad de los árboles clasificadores simples (\texttt{maxdepth}); el número de iteraciones o, de forma equivalente, el número de clasificadores distintos(\texttt{iter}); el coeficiente de aprendizaje (\texttt{nu}).
+Para la implementación vamos a utilizar de nuevo \texttt{train}; en este caso con el método \texttt{ada}. Este método tiene tres hiperparámetros: la profundidad de los árboles clasificadores simples (\texttt{maxdepth}); el número de iteraciones o, de forma equivalente, el número de clasificadores distintos (\texttt{iter}); el coeficiente de aprendizaje (\texttt{nu}).
 
 Puesto que vamos a utilizar como clasificadores débiles _stumps_, la profundidad de los árboles estará fijada a 1. Para optimizar los restantes hiperparámetros emplearemos de validación cruzada. Los valores entre los que se van a escoger son:
 
 ```{r}
 set.seed(111)
-grid = expand.grid(maxdepth=1, iter=c(20,30,40,50,60,70,80,90,100), 
+grid = expand.grid(maxdepth=1, iter=seq(20,100,10), 
                    nu=c(0.15,0.2,0.25,0.3))
 # La documentación del paquete ada indica que se deben especificar además los siguientes 
 # parámetros usando rpart para la utilización de stumps.
@@ -395,7 +406,17 @@ ada_fit = train(x = datos[indices_train,], y = as.factor(etiquetas[indices_train
                 tuneGrid = grid, control = rcontrol)
 ```
 
-Para cada una de las combinaciones de hiperparámetros \texttt{train} proporciona la precisión del modelo asociado. En la siguiente gráfica se muestran los valores del coeficiente de aprendizaje frente a la mayor precisión posible, junto con el número de iteraciones que se necesitaron para obtener dicho resultado.
+Para cada una de las combinaciones de hiperparámetros \texttt{train} proporciona la precisión del modelo asociado. Veamos los resultados de precisión para todas las combinaciones posibles:
+
+\vspace{0.7cm}
+```{r,echo=FALSE,fig.align='center',fig.height=3.9,fig.width=5.8}
+plot(ada_fit,pch=20,xlab="Número de iteraciones / árboles",ylab="Precisión de validación cruzada")
+```
+\vspace{0.7cm}
+
+Se observa una tendencia al alza en la precisión de la validación cruzada conforme aumentamos el número de iteraciones (o clasificadores simples distintos).
+
+Para visualizar mejor los mejores resultados, en la siguiente gráfica se muestran los valores del coeficiente de aprendizaje frente a la mayor precisión posible, junto con el número de iteraciones que se necesitaron para obtener dicho resultado.
 
 \vspace{0.7cm}
 ```{r, echo=FALSE,message=FALSE,fig.align='center',fig.height=3.6,fig.width=5.3}
@@ -422,7 +443,7 @@ Como podemos observar, la mayor precisión se obtiene con un coeficiente de apre
 
 El tercer modelo a estudiar será _SVM_. Frente a modelos lineales como el perceptrón o las regresiones, _SVM_ busca construir un separador con mayor poder de generalización; logra esto buscando un separador cuya separación (margen) respecto a los puntos más cercanos (vectores de soporte) sea máxima. El razonamiento subyacente se basa en que los nuevos datos que debamos clasificar serán presumiblemente similares a los de entrenamiento; por lo tanto, si nuestro clasificador se acerca demasiado a algunos puntos, hay cierta probabilidad de que una nueva observación cercana a ellos sea etiquetada de forma incorrecta.
 
-Análogamente a los modelos lineales mencionados, _SVM_ tiene su propia forma de tratar con datos no linealmente separables: los _kernels_. Un _kernel_ es una función que determina la similitud entre dos observaciones de forma equivalente a medir la distancia entre ellas en un espacio diferente al original. Nosotros usaremos el _kernel RBF_ gaussiano, que tiene un hiperparámetro $\gamma$ a ajustar. En el paquete \texttt{kernlab} que hemos utilizado a través de \texttt{train} este hiperparámetro es llamado $\sigma$.
+Análogamente a los modelos lineales mencionados, _SVM_ tiene su propia forma de tratar con datos no linealmente separables: los _kernels_. Un _kernel_ es una función que determina la similitud entre dos observaciones de forma equivalente a medir la distancia entre ellas en un espacio diferente al original. Nosotros usaremos el _kernel RBF_ gaussiano, que tiene un hiperparámetro $\gamma$ a ajustar. En el paquete \texttt{kernlab} que hemos utilizado a través de \texttt{train} este hiperparámetro es llamado $\sigma$ [@kernlab].
 
 Además, ya que los datos en la mayoría de los casos no son linealmente separables, \texttt{kernlab} nos permite ajustar el parámetro _C_, que controla la complejidad del modelo de forma similar a la regularización; en este caso, valores altos significan hipótesis más elaboradas que minimicen el error $\xi$ de cada punto (distancia al margen de su clase correcta; $\xi = 0$ si es un vector de soporte o está bien clasificado más allá de su margen; $0 < \xi < 2$ si está dentro de alguno de los dos márgenes; $\xi \geq 2$ si está mal clasificado más allá del margen opuesto).
 
@@ -443,6 +464,14 @@ svm_fit = train(x = datos[indices_train,], y = as.factor(etiquetas[indices_train
                 method = "svmRadial", trControl = control,
                 preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
 ```
+
+Observemos las diferentes precisiones obtenidas por todas las combinaciones de valores de $\sigma$ y _C_:
+
+\vspace{0.7cm}
+```{r,echo=FALSE}
+plot(svm_fit,pch=20,ylab="Precisión")
+```
+\vspace{0.7cm}
 
 Finalmente, vamos a analizar la máxima precisión posible con cada valor de $\sigma$, junto con sus valores de _C_ asociados:
 
@@ -467,4 +496,56 @@ text(x = datos_sigma[,1], y = datos_sigma[,2] , labels = c_sigma, cex = 0.7, pos
 ```
 \vspace{0.7cm}
 
-Como se puede apreciar en la gráfica anterior, la mayor precisión (alternativamente, el menor error) de validación cruzada se obtiene con $\sigma = 0.04$ y $C = 5$. Esta combinación de hiperparámetros será, pues, la elegida. 
+Como se puede apreciar en la gráfica anterior, la mayor precisión (alternativamente, el menor error) de validación cruzada se obtiene con $\sigma =$ 0.04 y $C = 5$. Esta combinación de hiperparámetros será, pues, la elegida.
+
+### Redes Neuronales
+
+```{r,echo=FALSE}
+set.seed(17)
+```
+
+```{r,results=FALSE}
+grid = expand.grid(layer1=c(seq(1,50,3),50), layer2=0, layer3=0)
+nn_fit_una = train(x = datos[indices_train,], y = etiquetas[indices_train],
+                   method = "neuralnet", linear.output=FALSE, trControl = control,
+                   preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
+grid = expand.grid(layer1=c(seq(3,50,5),50), layer2=seq(3,50,5), layer3=0)
+nn_fit_dos = train(x = datos[indices_train,], y = etiquetas[indices_train],
+                   method = "neuralnet", linear.output=FALSE, trControl = control, 
+                   preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
+grid = expand.grid(layer1=c(seq(1,50,10),50), layer2=seq(0,50,10), layer3=seq(0,50,10))
+nn_fit_tres = train(x = datos[indices_train,], y = etiquetas[indices_train],
+                    method = "neuralnet", linear.output=FALSE, trControl = control,
+                    preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
+```
+```{r nn,echo=FALSE,cache=TRUE}
+grid = expand.grid(layer1=c(seq(1,50,3),50), layer2=0, layer3=0)
+nn_fit_una = train(x = datos[indices_train,], y = etiquetas[indices_train],method = "neuralnet", linear.output=FALSE, trControl = control, preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
+grid = expand.grid(layer1=c(seq(3,50,5),50), layer2=seq(3,50,5), layer3=0)
+nn_fit_dos = train(x = datos[indices_train,], y = etiquetas[indices_train],method = "neuralnet", linear.output=FALSE, trControl = control, preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
+grid = expand.grid(layer1=c(seq(1,50,10),50), layer2=seq(0,50,10), layer3=seq(0,50,10))
+nn_fit_tres = train(x = datos[indices_train,], y = etiquetas[indices_train],method = "neuralnet", linear.output=FALSE, trControl = control, preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
+```
+
+## Selección del modelo final
+
+Tras haber estudiado individualmente los modelos, es el momento de decantarnos por uno de ellos.
+
+En primer lugar vamos a ver los $E_{in}$ y $E_{test}$ conseguidos por cada uno:
+
+```{r,results=FALSE,echo=FALSE}
+# Insertar tabla
+```
+
+De esta tabla se extrae que la regresión logística es suficiente para predecir con alta fiabilidad nuevos datos; de hecho, parece realizar un mejor ajuste que los modelos no lineales. Para confirmar esto, vamos a analizar también las curvas _ROC_ y el área debajo de las mismas.
+
+| Modelo                 | Area Under Curve |
+|:----------------------:|:----------------:|
+| Regresión Logística    |   0.9914568345   | 
+| Random Forest          |   0.9774930056   | 
+| Boosting               |   0.9792915667   | 
+| Support Vector Machine |   0.9732713829   |
+
+\newpage
+
+# Referencias
