@@ -388,8 +388,11 @@ Para la implementación vamos a utilizar de nuevo \texttt{train}; en este caso c
 
 Puesto que vamos a utilizar como clasificadores débiles _stumps_, la profundidad de los árboles estará fijada a 1. Para optimizar los restantes hiperparámetros emplearemos de validación cruzada. Los valores entre los que se van a escoger son:
 
-```{r}
+```{r, echo=FALSE}
 set.seed(111)
+```
+
+```{r}
 grid = expand.grid(maxdepth=1, iter=seq(20,100,10), 
                    nu=c(0.15,0.2,0.25,0.3))
 # La documentación del paquete ada indica que se deben especificar además los siguientes 
