@@ -250,23 +250,42 @@ text(x = datos_sigma[,1], y = datos_sigma[,2] , labels = c_sigma, cex = 0.7, pos
 #######################################
 # Neural Networks
 
-set.seed(17)
-layers = c(3,3)
-datos_nn = cbind(datos,etiquetas)
-colnames(datos_nn)[ncol(datos_nn)] = "etiquetas"
-formula_nn = as.formula(paste("etiquetas~",paste(colnames(datos),collapse = "+")))
-net = neuralnet(formula_nn,data=datos_nn[indices_train,],hidden=layers,linear.output=FALSE)
-prediccion = compute(net,datos[-indices_train,])
-porcentaje_error(categorizar(prediccion$net.result),etiquetas[-indices_train])
+# set.seed(17)
+# layers = c(3,3)
+# datos_nn = cbind(datos,etiquetas)
+# colnames(datos_nn)[ncol(datos_nn)] = "etiquetas"
+# formula_nn = as.formula(paste("etiquetas~",paste(colnames(datos),collapse = "+")))
+# net = neuralnet(formula_nn,data=datos_nn[indices_train,],hidden=layers,linear.output=FALSE)
+# prediccion = compute(net,datos[-indices_train,])
+# porcentaje_error(categorizar(prediccion$net.result),etiquetas[-indices_train])
 
+# preProcess = c("YeoJohnson","center","scale")
+
+ptm <- proc.time()
 set.seed(17)
+control = trainControl(method = "cv", number = 5)
 grid = expand.grid(layer1=c(seq(1,50,3),50), layer2=0, layer3=0)
-nn_fit_una = train(x = datos[indices_train,], y = etiquetas[indices_train],method = "neuralnet", linear.output=FALSE, trControl = control, preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
+nn_fit_una = train(x = datos[indices_train,], y = etiquetas[indices_train],method = "neuralnet", linear.output=FALSE, trControl = control, tuneGrid = grid)
 grid = expand.grid(layer1=c(seq(3,50,5),50), layer2=seq(3,50,5), layer3=0)
-nn_fit_dos = train(x = datos[indices_train,], y = etiquetas[indices_train],method = "neuralnet", linear.output=FALSE, trControl = control, preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
+nn_fit_dos = train(x = datos[indices_train,], y = etiquetas[indices_train],method = "neuralnet", linear.output=FALSE, trControl = control, tuneGrid = grid)
 grid = expand.grid(layer1=c(seq(1,50,10),50), layer2=seq(0,50,10), layer3=seq(0,50,10))
-nn_fit_tres = train(x = datos[indices_train,], y = etiquetas[indices_train],method = "neuralnet", linear.output=FALSE, trControl = control, preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
+nn_fit_tres = train(x = datos[indices_train,], y = etiquetas[indices_train],method = "neuralnet", linear.output=FALSE, trControl = control, tuneGrid = grid)
+end_time = proc.time() - ptm
 
+p_una_nn_in = predict(nn_fit_una, datos[indices_train,])
+err_in_una = porcentaje_error(categorizar(p_una_nn_in), etiquetas[indices_train])
+p_una_nn = predict(nn_fit_una, datos[-indices_train,])
+err_una = porcentaje_error(categorizar(p_una_nn), etiquetas[-indices_train])
+
+p_dos_nn_in = predict(nn_fit_dos, datos[indices_train,])
+err_in_dos = porcentaje_error(categorizar(p_dos_nn_in), etiquetas[indices_train])
+p_dos_nn = predict(nn_fit_dos, datos[-indices_train,])
+err_dos = porcentaje_error(categorizar(p_dos_nn), etiquetas[-indices_train])
+
+p_tres_nn_in = predict(nn_fit_tres, datos[indices_train,])
+err_in_tres = porcentaje_error(categorizar(p_tres_nn_in), etiquetas[indices_train])
+p_tres_nn = predict(nn_fit_tres, datos[-indices_train,])
+err_tres = porcentaje_error(categorizar(p_tres_nn), etiquetas[-indices_train])
 ###############################################################################
 # Curvas ROC
 
@@ -301,3 +320,24 @@ eval_svm = predict(modelo_svm,datos[-indices_train,],type="prob")[,2]
 roc_svm = calcula_curva_roc(eval_svm,etiquetas[-indices_train])
 plot(roc_svm$curva)
 area_roc_svm = roc_svm$area@y.values
+
+# Curva ROC Redes Neuronales con una capa
+modelo_nn_una = nn_fit_una
+eval_nn_una = compute(modelo_nn_una$finalModel,datos[-indices_train,])
+roc_nn_una = calcula_curva_roc(eval_nn_una$net.result,etiquetas[-indices_train])
+plot(roc_nn_una$curva)
+area_roc_nn_una = roc_nn_una$area@y.values
+
+# Curva ROC Redes Neuronales con dos capa
+modelo_nn_dos= nn_fit_dos
+eval_nn_dos = compute(modelo_nn_dos$finalModel,datos[-indices_train,])
+roc_nn_dos = calcula_curva_roc(eval_nn_dos$net.result,etiquetas[-indices_train])
+plot(roc_nn_dos$curva)
+area_roc_nn_dos = roc_nn_dos$area@y.values
+
+# Curva ROC Redes Neuronales con dos capa
+modelo_nn_tres= nn_fit_tres
+eval_nn_tres = compute(modelo_nn_tres$finalModel,datos[-indices_train,])
+roc_nn_tres = calcula_curva_roc(eval_nn_tres$net.result,etiquetas[-indices_train])
+plot(roc_nn_tres$curva)
+area_roc_nn_tres = roc_nn_tres$area@y.values
