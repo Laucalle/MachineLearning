@@ -96,6 +96,8 @@ evalua_glm = function(formula,datos,subconjunto,fp=1,fn=1,familia=binomial()){
     porc_error = porcentaje_error(categorizar(prediccion_test),datos[-subconjunto,ncol(datos)],fp,fn)
     list(formula=formula, error=porc_error,reg=reg_lin)
 }
+
+calcular_cota_eout = function(N,delta) sqrt((log(delta/2))/(-2*N))
 ```
 
 # Introducción
@@ -503,11 +505,15 @@ Como se puede apreciar en la gráfica anterior, la mayor precisión (alternativa
 
 ### Redes Neuronales
 
+En este último apartado sobre modelos no lineales vamos a hablar de las redes neuronales. Las redes neuronales son una generalización del perceptrón. Puesto que es un modelo muy potente, es también muy sensible al sobreajuste. Por consiguiente, dado que una simple regresión logística ya consigue un error bajo, es probable que una red neuronal aporte complejidad innecesaria.
+
+Las redes neuronales pueden presentar distintas arquitecturas según el número de capas ocultas y el número de neuronas de cada una de éstas. En nuestro caso, probaremos redes neuronales con una, dos o tres capas ocultas que contendrán neuronas en el rango [1,50].
+
 ```{r,echo=FALSE}
 set.seed(17)
 ```
 
-```{r,results=FALSE}
+```{r,eval=FALSE}
 grid = expand.grid(layer1=c(seq(1,50,3),50), layer2=0, layer3=0)
 nn_fit_una = train(x = datos[indices_train,], y = etiquetas[indices_train],
                    method = "neuralnet", linear.output=FALSE, trControl = control,
@@ -521,14 +527,18 @@ nn_fit_tres = train(x = datos[indices_train,], y = etiquetas[indices_train],
                     method = "neuralnet", linear.output=FALSE, trControl = control,
                     preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
 ```
-```{r nn,echo=FALSE,cache=TRUE}
-grid = expand.grid(layer1=c(seq(1,50,3),50), layer2=0, layer3=0)
-nn_fit_una = train(x = datos[indices_train,], y = etiquetas[indices_train],method = "neuralnet", linear.output=FALSE, trControl = control, preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
-grid = expand.grid(layer1=c(seq(3,50,5),50), layer2=seq(3,50,5), layer3=0)
-nn_fit_dos = train(x = datos[indices_train,], y = etiquetas[indices_train],method = "neuralnet", linear.output=FALSE, trControl = control, preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
-grid = expand.grid(layer1=c(seq(1,50,10),50), layer2=seq(0,50,10), layer3=seq(0,50,10))
-nn_fit_tres = train(x = datos[indices_train,], y = etiquetas[indices_train],method = "neuralnet", linear.output=FALSE, trControl = control, preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
-```
+
+Los resultados obtenidos por cada una de las tres variantes se pueden ver en la siguiente tabla:
+
+|   Número de capas     | $E_{CV}$ |
+|:---------------------:|:--------:|
+| Una capa              | 1.6667   |
+| Dos capas             | 5.4545   |
+| Tres capas            | 1.5151   |
+
+Guiándonos por los números, la elección parece ser una red neuronal de tres capas. Sin embargo, ya que el rendimiento de la redes neuronales depende mucho de su arquitectura y no es sencillo encontrar un equilibrio entre potencia de ajuste a los datos de entrenamiento y generalización, en esta ocasión hemos decidido comparar las tres redes neuronales con los otros tipos de modelos.
+
+Por otra parte, los experimentos realizados en este proyecto nos indican que el coste en términos de tiempo es prohibitivo: calcular estas redes neuronales consume varias horas, frente a pocos minutos en los demás casos. Por ello, aun si observásemos mejores resultados que los de sus competidores, probablemente no compensaría el esfuerzo computacional añadido.
 
 ## Selección del modelo final
 
@@ -536,19 +546,24 @@ Tras haber estudiado individualmente los modelos, es el momento de decantarnos p
 
 En primer lugar vamos a ver los $E_{in}$ y $E_{test}$ conseguidos por cada uno:
 
-```{r,results=FALSE,echo=FALSE}
-# Insertar tabla
-```
+|         Modelo                | $E_{in}$ |  $E_{test}$ |
+|:-----------------------------:|:--------:|:-----------:|
+| Regresión Logística           |  5.9091  | 4.5936      |
+| Random Forest                 |     0    | 6.3604      |
+| Boosting                      |  8.3333  | 6.7137      |
+| Support Vector Machine        |  1.3636  | 8.8339      |
+| Red neuronal de una capa      |  1.6667  | 7.7738      |
+| Red neuronal de dos capas     |  5.4545  | 9.5406      |
+| Red neuronal de tres capas    |  1.5151  | 8.4805      |
 
-De esta tabla se extrae que la regresión logística es suficiente para predecir con alta fiabilidad nuevos datos; de hecho, parece realizar un mejor ajuste que los modelos no lineales. Para confirmar esto, vamos a analizar también las curvas _ROC_ y el área debajo de las mismas.
+De esta tabla se extrae que la regresión logística es más que suficiente para predecir con alta fiabilidad nuevos datos; de hecho, parece realizar un mejor ajuste que los modelos no lineales. Para confirmar esto, vamos a analizar también las curvas _ROC_ y el área debajo de las mismas.
 
-| Modelo                 | Area Under Curve |
-|:----------------------:|:----------------:|
-| Regresión Logística    |   0.9914568345   | 
-| Random Forest          |   0.9774930056   | 
-| Boosting               |   0.9792915667   | 
-| Support Vector Machine |   0.9732713829   |
-
-\newpage
-
-# Referencias
+| Modelo                    | Area Under Curve |
+|:-------------------------:|:----------------:|
+| Regresión Logística       |   0.9914568345   | 
+| Random Forest             |   0.9774930056   | 
+| Boosting                  |   0.9792915667   | 
+| Support Vector Machine    |   0.9732713829   |
+| Red neuronal de una capa  |       |
+| Red neuronal de dos capas |       |
+| Red neuronal de tres capas|       |
