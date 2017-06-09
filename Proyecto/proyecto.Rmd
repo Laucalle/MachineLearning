@@ -288,6 +288,8 @@ El punto señalado en verde nos indica el conjunto de predictores cuyo error ha 
 
 Ya que hemos conseguido no sólo reducir el número de predictores necesarios (de 28 a 13) sino también el error, vamos a elegir el modelo que proporciona un 4.59\% de error para futuras comparaciones con modelos no lineales.
 
+Cabe mencionar que de ahora en adelante las transformaciones de preprocesamiento de datos serán sin análisis de componentes principales puesto que, como ya hemos visto, no sólo obtienen mejores resultados sino que facilitan la interpretación de los mismos.
+
 \newpage
 
 ## Modelos no lineales
@@ -388,7 +390,7 @@ En nuestro caso, los clasificadores débiles que utilizaremos son denominados _s
 
 Para la implementación vamos a utilizar de nuevo \texttt{train}; en este caso con el método \texttt{ada}. Este método tiene tres hiperparámetros: la profundidad de los árboles clasificadores simples (\texttt{maxdepth}); el número de iteraciones o, de forma equivalente, el número de clasificadores distintos (\texttt{iter}); el coeficiente de aprendizaje (\texttt{nu}).
 
-Puesto que vamos a utilizar como clasificadores débiles _stumps_, la profundidad de los árboles estará fijada a 1. Para optimizar los restantes hiperparámetros emplearemos de validación cruzada. Los valores entre los que se van a escoger son:
+Puesto que vamos a utilizar como clasificadores débiles _stumps_, la profundidad de los árboles estará fijada a 1. Para optimizar los restantes hiperparámetros emplearemos validación cruzada. Los valores entre los que se van a escoger son:
 
 ```{r, echo=FALSE}
 set.seed(111)
@@ -419,7 +421,7 @@ plot(ada_fit,pch=20,xlab="Número de iteraciones / árboles",ylab="Precisión de
 ```
 \vspace{0.7cm}
 
-Se observa una tendencia al alza en la precisión de la validación cruzada conforme aumentamos el número de iteraciones (o clasificadores simples distintos).
+Se observa una tendencia al alza en la precisión de la validación cruzada conforme aumentamos el número de iteraciones (o clasificadores simples distintos). Esto probablemente sea debido al _underfitting_ que se da de forma natural en muchos casos cuando el modelo que construye _Boosting_ aún no tiene la complejidad suficiente para explicar los datos.
 
 \newpage
 
@@ -454,7 +456,7 @@ Análogamente a los modelos lineales mencionados, _SVM_ tiene su propia forma de
 
 $$K(x,x^\prime) = e^{-\gamma||x-x^\prime||^2} $$
 
-Además, ya que los datos en la mayoría de los casos no son linealmente separables, \texttt{kernlab} nos permite ajustar el parámetro _C_, que controla la complejidad del modelo de forma similar a la regularización; en este caso, valores altos significan hipótesis más elaboradas que minimicen el error $\xi$ de cada punto (distancia al margen de su clase correcta; $\xi = 0$ si es un vector de soporte o está bien clasificado más allá de su margen; $0 < \xi < 2$ si está dentro de alguno de los dos márgenes; $\xi \geq 2$ si está mal clasificado más allá del margen opuesto).
+Además, ya que los datos en la mayoría de los casos no son linealmente separables, \texttt{kernlab} nos permite ajustar el parámetro _C_, que controla la complejidad del modelo de forma similar a la regularización; en este caso, valores altos significan hipótesis más precisas que minimicen el error $\xi$ de cada punto (distancia al margen de su clase correcta; $\xi = 0$ si es un vector de soporte o está bien clasificado más allá de su margen; $0 < \xi < 2$ si está dentro de alguno de los dos márgenes; $\xi \geq 2$ si está mal clasificado más allá del margen opuesto).
 
 \newpage
 
@@ -483,7 +485,7 @@ Observemos las diferentes precisiones obtenidas por todas las combinaciones de v
 plot(svm_fit,pch=20,ylab="Precisión")
 ```
 \vspace{0.7cm}
-
+Como se puede apreciar, valores más altos de _C_ resultan por lo general en ajustes de validación cruzada con una calidad un poco mayor. Esto concuerda con la explicación dada anteriormente.
 \newpage
 
 Finalmente, vamos a analizar la máxima precisión posible con cada valor de $\sigma$, junto con sus valores de _C_ asociados:
@@ -553,12 +555,16 @@ plot(nn_fit_una, ylab= "Error de validación cruzada", xlab="Neuronas", pch = 20
 plot(nn_fit_dos, ylab= "Error de validación cruzada", xlab="Neuronas Capa 1", pch = 20)
 ```
 
+El eje Y en ambos casos representa el error obtenido en la validación cruzada y el eje X el número de neuronas existentes en la primera capa oculta. Puesto que la segunda gráfica corresponde a una arquitectura de dos capas, las distintas líneas representan el número de neuronas de la segunda capa oculta. En la primera observamos que el menor error se obtiene con 13 neuronas y en la segunda con 3 y 8 neuronas por capa.
+
+\newpage
+
 Los mejores resultados obtenidos por cada una de las tres variantes se pueden ver en la siguiente tabla:
 
 |   Número de capas     | Neuronas por capa | $E_{CV}$ |
 |:---------------------:|:-----------------:|:--------:|
 | Una capa              | 13                | 1.6667   |
-| Dos capas             | 2, 8              | 5.4545   |
+| Dos capas             | 3, 8              | 5.4545   |
 | Tres capas            | 11, 31, 20        | 1.5151   |
 
 Guiándonos por los números, la elección parece ser una red neuronal de tres capas. Sin embargo, ya que el rendimiento de la redes neuronales depende mucho de su arquitectura y no es sencillo encontrar un equilibrio entre potencia de ajuste a los datos de entrenamiento y generalización, en esta ocasión hemos decidido comparar las tres redes neuronales con los otros tipos de modelos.
@@ -679,20 +685,21 @@ plot(roc_nn_dos$curva, main = "NN 2 layers", col = "blue")
 plot(roc_nn_tres$curva, main = "NN 3 layers", col = "blue")
 ```
 
+\newpage
 
 ## Descripción del modelo elegido
 
 El modelo final será, como hemos mencionado anteriormente, la regresión logística. A continuación, vamos a presentar las características que han intervenido en el ajuste final junto con sus pesos y los valores utilizados en los distintos métodos de preprocesamiento:
     
 | Var.  |   Peso  | Centrado | Escalado | Yeo-Jonhson | Var.     | Peso      | Centrado | Escalado| Yeo-Jonhson |
-|:-----:|:-------:|:--------:|:--------:|:------------------:|:--------:|:---------:|---------:|:-------:|:------------------:|
-| FSW.1 |  3.5753 | 6.9361   | 1.4599   | 0.3273             | SSP.2    |  -5.1918  | 162.4274 | 49.1844 | 1.4974             |
-| SSW.1 |  1.4204 | 4.3006   | 1.1066   | 0.2869             | SSW.2    |  -1.0284  | 4.6731   | 1.3173  | 0.3366             |
-| BPC.1 |  1.8938 | 2.2502   | 1.1279   | 0.3069             | BPC.2    |  -1.7250  | 2.2651   | 1.1205  | 0.3316             |
-| BPW.1 |  0.9310 | 3.0814   | 1.5783   | 0.4139             | BPW.2    |  -0.8471  | 3.0681   | 1.5396  | 0.4159             |
-| TPW.1 | 15.7692 | 7.9018   | 5.7159   | 0.3695             | NPW.2    |   0.2786  | 4.6566   | 2.4294  | 0.3841             |
-| FSP.2 | -4.882 | 5.3850   | 0.2134   | 0.1221             | TPW.2    | -15.854  | 8.0051   | 5.7826  | 0.3730             |
-| FSW.2 | -4.401 | 6.1526   | 1.1877   | 0.2717             | Intercept|   0.02848 |          |         |                    |
+|:-----:|:-------:|:--------:|:--------:|:-----------:|:--------:|:---------:|---------:|:-------:|:-----------:|
+| FSW.1 |  3.5753 | 6.9361   | 1.4599   | 0.3273      | SSP.2    |  -5.1918  | 162.4274 | 49.1844 | 1.4974      |
+| SSW.1 |  1.4204 | 4.3006   | 1.1066   | 0.2869      | SSW.2    |  -1.0284  | 4.6731   | 1.3173  | 0.3366      |
+| BPC.1 |  1.8938 | 2.2502   | 1.1279   | 0.3069      | BPC.2    |  -1.7250  | 2.2651   | 1.1205  | 0.3316      |
+| BPW.1 |  0.9310 | 3.0814   | 1.5783   | 0.4139      | BPW.2    |  -0.8471  | 3.0681   | 1.5396  | 0.4159      |
+| TPW.1 | 15.7692 | 7.9018   | 5.7159   | 0.3695      | NPW.2    |   0.2786  | 4.6566   | 2.4294  | 0.3841      |
+| FSP.2 | -4.882  | 5.3850   | 0.2134   | 0.1221      | TPW.2    | -15.854   | 8.0051   | 5.7826  | 0.3730      |
+| FSW.2 | -4.401  | 6.1526   | 1.1877   | 0.2717      | Intercept|   0.02848 |          |         |             |
 
 Para obtener un estimador del error fuera de la muestra vamos a emplear el error de test y la desigualdad de _Hoeffding_:
     
@@ -705,4 +712,7 @@ $$\delta \leq 2e^{-2N\epsilon^2}$$
 Junto con el error en la partición de test obtendremos, despejando $\epsilon$ de la siguiente forma, un intervalo en el que se encuentra $E_{out}$ con una tolerancia $\delta =$ 0.05.
 
 $$ \sqrt{\frac{log(2)-log(\delta)}{2N}} \geq \epsilon$$
-    
+
+La cota final obtenida es $E_{test} + \epsilon =$ 4.5936 + 0.0807 = 4.6743. Ya que se trata de un valor bajo para $\epsilon$, podemos decir que la partición de test representa lo suficientemente bien el comportamiento del resto de la población.
+
+Tras realizar este estudio y pese a la potencia de los modelos que se han propuesto, hay clara evidencia de que modelos más sencillos pueden realizar un mejor ajuste si los datos presentan tendencia lineal. En este caso es sensato afirmar ocurre, aunque la naturaleza del problema no lo sugiriera.  
