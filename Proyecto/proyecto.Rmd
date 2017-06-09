@@ -10,7 +10,6 @@ output:
         includes:
             in_header: header.tex
             before_body: titlepage.tex
-#bibliography: citas.bib
 ---
 
 ```{r setup, include=FALSE}
@@ -20,15 +19,15 @@ knitr::opts_chunk$set(echo = TRUE)
 \newpage
 
 ```{r,echo=FALSE,message=FALSE}
-library("neuralnet", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
-library("caret", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
-library("e1071", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
-library("glmnet", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
-library("ROCR", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
-library("leaps", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
-library("randomForest", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
-library("ada", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
-library("kernlab", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.3")
+library("neuralnet", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.4")
+library("caret", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.4")
+library("e1071", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.4")
+library("glmnet", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.4")
+library("ROCR", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.4")
+library("leaps", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.4")
+library("randomForest", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.4")
+library("ada", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.4")
+library("kernlab", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.4")
 ```
 
 ```{r,echo=FALSE}
@@ -139,7 +138,7 @@ Para la realización de este trabajo se ha empleado la base de datos _Tennis Maj
 
 Esta base de datos contiene valores perdidos. No obstante, todos ellos representan cantidades que se pueden sustituir por cero de forma segura ya que denotan, por ejemplo, ausencia de errores no forzados, ausencia de _aces_ o sets no jugados (por abandono o por no ser necesarios).
 
-Debido a que este conjunto de datos no tiene una variable de respuesta definida explícitamente, vamos a elegir una: el resultado del partido. Para que la predicción no sea trivial, es necesario eliminar algunas características que permiten determinar unívocamente el resultado, como el número de sets ganados por cada jugador y la puntuación dentro de los mismos. Además, por la naturaleza del dominio del problema, aprovecharemos que se nos proporciona implícitamente el tipo de pista en el que se han jugado los partidos para considerarlo como una característica más. Una vez realizado todo esto, comprobaremos así si es factible utilizar el resto de los predictores con el mismo propósito.
+Debido a que este conjunto de datos no tiene una variable de respuesta definida explícitamente, vamos a elegir una: el resultado del partido. Para que la predicción no sea trivial, es necesario eliminar algunas características que permiten determinar unívocamente el resultado, como el número de sets ganados por cada jugador y la puntuación dentro de los mismos. Además, por la naturaleza del dominio del problema, aprovecharemos que se nos proporciona implícitamente el tipo de pista en el que se han jugado los partidos para considerarlo como una característica más; ya que es un factor con tres niveles, se añadirán dos variables _dummy_ para contemplarlo (la tercera clase es una combinación lineal de las otras dos). Una vez realizado todo esto, pasaremos de 40 variables a 28 y comprobaremos así si es factible utilizar este nuevo conjunto de predictores con el mismo propósito.
 
 Un aspecto a tener en cuenta es el sesgo del propio conjunto de datos, provocado por la forma de construir las observaciones. Al ser la asignación de *Jugador 1* y *Jugador 2* arbitraria, de forma implícita se está favoreciendo que el mismo estadístico para un jugador tenga más importancia que para otro. Nosotros, por conocimiento general de este problema, sabemos que no importa en qué orden los nombremos; sin embargo, los modelos no tienen esta información y pueden llegar a conclusiones sesgadas basadas en este orden. Por ejemplo, para un mismo partido, la observación en la que el primer jugador comete 10 dobles faltas y el segundo comete 5 es equivalente a la observación en la que el primer jugador comete 5 dobles faltas y el segundo 10, ya que los jugadores son intercambiables. Un modelo no tiene esta información intuitiva y, por tanto, podría dar importancias distintas a variables en teoría simétricas.
 
@@ -178,10 +177,8 @@ indices_train = datos$indices_train
 datos = datos$datos
 
 preprocesar_datos = function(datos,indices_train,metodos,umbral_varianza=0.9){
-    
     preprocess_obj = preProcess(datos[indices_train,],method=metodos,umbral_varianza)
     nuevosDatos = predict(preprocess_obj,datos)
-    
 }
 
 datos[is.na(datos)] = 0 # Sustituimos los valores perdidos por 0
@@ -200,7 +197,7 @@ colnames(datos_procesados)[ncol(datos_procesados)] = "etiquetas"
 colnames(datos_procesados_sin_pca)[ncol(datos_procesados_sin_pca)] = "etiquetas"
 ```
 
-Ya que existe la posibilidad de que el análisis de componentes principales elimine características relevantes, vamos a realizar experimentos separados preprocesando los datos con y sin esta técnica.
+El análisis de componentes principales reduce a 9 los predictores a utilizar. Ya que existe la posibilidad de que este análisis elimine características relevantes, vamos a realizar experimentos separados preprocesando los datos con y sin esta técnica.
 
 # Modelos a estudiar
 
@@ -369,6 +366,8 @@ points(x=ajustes_rf_cv[1,rf_cv_min_error_index], y=ajustes_rf_cv[2,rf_cv_min_err
 
 El punto señalado en naranja indica el número de árboles con el que se ha obtenido el menor $E_{CV}$: 465. Por ello, ajustaremos un modelo con 465 árboles utilizando toda la partición de entrenamiento para posteriormente evaluar su calidad sobre la partición de test.
 
+\newpage
+
 Para finalizar, veamos cómo ha evolucionado el error de este modelo conforme aumenta su número de árboles:
 
 \vspace{0.7cm}
@@ -377,6 +376,7 @@ plot(ajustes_rf_cv[3,rf_cv_min_error_index]$rf$finalModel,lty=1,main="Evolución
 legend(290,0.25,c("Error Out Of Bag","Error clase 1","Error clase 0"),lty=c(1,1),lwd=c(2.5,2.5),col=c("black","green","red"))
 ```
 \vspace{0.7cm}
+Vemos que el error _Out Of Bag_ disminuye progresivamente hasta estabilizarse. Esto es así porque un modelo con pocos árboles adolece de sobreajuste, problema que se soluciona en parte al promediar las predicciones de un número creciente de clasificadores.
 
 ### _Boosting_
 
@@ -421,6 +421,8 @@ plot(ada_fit,pch=20,xlab="Número de iteraciones / árboles",ylab="Precisión de
 
 Se observa una tendencia al alza en la precisión de la validación cruzada conforme aumentamos el número de iteraciones (o clasificadores simples distintos).
 
+\newpage
+
 Para visualizar mejor los mejores resultados, en la siguiente gráfica se muestran los valores del coeficiente de aprendizaje frente a la mayor precisión posible, junto con el número de iteraciones que se necesitaron para obtener dicho resultado.
 
 \vspace{0.7cm}
@@ -448,9 +450,13 @@ Como podemos observar, la mayor precisión se obtiene con un coeficiente de apre
 
 El tercer modelo a estudiar será _SVM_. Frente a modelos lineales como el perceptrón o las regresiones, _SVM_ busca construir un separador con mayor poder de generalización; logra esto buscando un separador cuya separación (margen) respecto a los puntos más cercanos (vectores de soporte) sea máxima. El razonamiento subyacente se basa en que los nuevos datos que debamos clasificar serán presumiblemente similares a los de entrenamiento; por lo tanto, si nuestro clasificador se acerca demasiado a algunos puntos, hay cierta probabilidad de que una nueva observación cercana a ellos sea etiquetada de forma incorrecta.
 
-Análogamente a los modelos lineales mencionados, _SVM_ tiene su propia forma de tratar con datos no linealmente separables: los _kernels_. Un _kernel_ es una función que determina la similitud entre dos observaciones de forma equivalente a medir la distancia entre ellas en un espacio diferente al original. Nosotros usaremos el _kernel RBF_ gaussiano, que tiene un hiperparámetro $\gamma$ a ajustar. En el paquete \texttt{kernlab} que hemos utilizado a través de \texttt{train} este hiperparámetro es llamado $\sigma$ [@kernlab].
+Análogamente a los modelos lineales mencionados, _SVM_ tiene su propia forma de tratar con datos no linealmente separables: los _kernels_. Un _kernel_ es una función que determina la similitud entre dos observaciones de forma equivalente a medir la distancia entre ellas en un espacio diferente al original. Nosotros usaremos el _kernel RBF_ gaussiano, cuya expresión se muestra tras estas líneas, que tiene un hiperparámetro $\gamma$ a ajustar. En el paquete \texttt{kernlab} que hemos utilizado a través de \texttt{train} este hiperparámetro es llamado $\sigma$.
+
+$$K(x,x^\prime) = e^{-\gamma||x-x^\prime||^2} $$
 
 Además, ya que los datos en la mayoría de los casos no son linealmente separables, \texttt{kernlab} nos permite ajustar el parámetro _C_, que controla la complejidad del modelo de forma similar a la regularización; en este caso, valores altos significan hipótesis más elaboradas que minimicen el error $\xi$ de cada punto (distancia al margen de su clase correcta; $\xi = 0$ si es un vector de soporte o está bien clasificado más allá de su margen; $0 < \xi < 2$ si está dentro de alguno de los dos márgenes; $\xi \geq 2$ si está mal clasificado más allá del margen opuesto).
+
+\newpage
 
 Por medio de validación cruzada estimaremos los parámetros _C_ y $\sigma$ para el modelo que nos ocupa. Como en las secciones anteriores, se realizarán 10 particiones de validación. Los valores entre los que se elegirán se definen en la siguiente línea de código:
 
@@ -477,6 +483,8 @@ Observemos las diferentes precisiones obtenidas por todas las combinaciones de v
 plot(svm_fit,pch=20,ylab="Precisión")
 ```
 \vspace{0.7cm}
+
+\newpage
 
 Finalmente, vamos a analizar la máxima precisión posible con cada valor de $\sigma$, junto con sus valores de _C_ asociados:
 
@@ -505,9 +513,9 @@ Como se puede apreciar en la gráfica anterior, la mayor precisión (alternativa
 
 ### Redes Neuronales
 
-En este último apartado sobre modelos no lineales vamos a hablar de las redes neuronales. Las redes neuronales son una generalización del perceptrón. Puesto que es un modelo muy potente, es también muy sensible al sobreajuste. Por consiguiente, dado que una simple regresión logística ya consigue un error bajo, es probable que una red neuronal aporte complejidad innecesaria.
+En este último apartado sobre modelos no lineales vamos a hablar de las redes neuronales. Las redes neuronales son una generalización del perceptrón. Puesto que es un modelo muy potente, es también muy sensible al sobreajuste. Por consiguiente, dado que para nuestro problema una simple regresión logística ya consigue un error bajo, es probable que una red neuronal aporte complejidad innecesaria.
 
-Las redes neuronales pueden presentar distintas arquitecturas según el número de capas ocultas y el número de neuronas de cada una de éstas. En nuestro caso, probaremos redes neuronales con una, dos o tres capas ocultas que contendrán neuronas en el rango [1,50].
+Las redes neuronales pueden presentar distintas arquitecturas según el número de capas ocultas y el número de neuronas de cada una de éstas. En nuestro caso, probaremos redes neuronales con una, dos o tres capas ocultas que contendrán neuronas en el rango [1,50]. El peso inicial de cada neurona se asigna aleatoriamente.
 
 ```{r,echo=FALSE}
 set.seed(17)
@@ -522,25 +530,49 @@ grid = expand.grid(layer1=c(seq(3,50,5),50), layer2=seq(3,50,5), layer3=0)
 nn_fit_dos = train(x = datos[indices_train,], y = etiquetas[indices_train],
                    method = "neuralnet", linear.output=FALSE, trControl = control, 
                    preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
-grid = expand.grid(layer1=c(seq(1,50,10),50), layer2=seq(0,50,10), layer3=seq(0,50,10))
+grid = expand.grid(layer1=c(seq(1,50,10),50), layer2=seq(1,50,10), layer3=seq(1,50,10))
 nn_fit_tres = train(x = datos[indices_train,], y = etiquetas[indices_train],
                     method = "neuralnet", linear.output=FALSE, trControl = control,
                     preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
 ```
 
-Los resultados obtenidos por cada una de las tres variantes se pueden ver en la siguiente tabla:
+```{r, echo=FALSE}
+load(file = "entorno_completo.RData")
+```
 
-|   Número de capas     | $E_{CV}$ |
-|:---------------------:|:--------:|
-| Una capa              | 1.6667   |
-| Dos capas             | 5.4545   |
-| Tres capas            | 1.5151   |
+
+\newpage
+
+Ahora representaremos de forma gráfica el resultado de la validación cruzada para una y dos capas:
+
+\vspace{0.7cm}
+```{r,echo=FALSE,fig.align='center',fig.height=3.6,fig.width=5.3}
+plot(nn_fit_una, ylab= "Error de validación cruzada", xlab="Neuronas", pch = 20)
+```
+```{r,echo=FALSE,fig.align='center',fig.height=3.9,fig.width=5.8}
+plot(nn_fit_dos, ylab= "Error de validación cruzada", xlab="Neuronas Capa 1", pch = 20)
+```
+
+Los mejores resultados obtenidos por cada una de las tres variantes se pueden ver en la siguiente tabla:
+
+|   Número de capas     | Neuronas por capa | $E_{CV}$ |
+|:---------------------:|:-----------------:|:--------:|
+| Una capa              | 13                | 1.6667   |
+| Dos capas             | 2, 8              | 5.4545   |
+| Tres capas            | 11, 31, 20        | 1.5151   |
 
 Guiándonos por los números, la elección parece ser una red neuronal de tres capas. Sin embargo, ya que el rendimiento de la redes neuronales depende mucho de su arquitectura y no es sencillo encontrar un equilibrio entre potencia de ajuste a los datos de entrenamiento y generalización, en esta ocasión hemos decidido comparar las tres redes neuronales con los otros tipos de modelos.
 
-Por otra parte, los experimentos realizados en este proyecto nos indican que el coste en términos de tiempo es prohibitivo: calcular estas redes neuronales consume varias horas, frente a pocos minutos en los demás casos. Por ello, aun si observásemos mejores resultados que los de sus competidores, probablemente no compensaría el esfuerzo computacional añadido.
+Por otra parte, los experimentos realizados en este proyecto nos indican que el coste en términos de tiempo es prohibitivo: calcular estas redes neuronales ha consumido más de 8 horas, frente a pocos minutos en los demás casos. Por ello, aun si observásemos mejores resultados que los de sus competidores, probablemente no compensaría el esfuerzo computacional añadido.
 
-## Selección del modelo final
+```{r, echo=FALSE, fig.align='center',fig.height=3.6,fig.width=5.3, eval =FALSE}
+# Como apunte final, comentaremos que las redes neuronales se pueden representar gráficamente en \texttt{R} de forma bastante inmediata. La representación deja de ser ilustrativa cuando el número de neuronas es elevado, de modo que aquí mostraremos el modelo obtenido más sencillo:
+plot.nnet(nn_fit_dos$finalModel)
+```
+
+
+# Selección del modelo final
+## Comparativa
 
 Tras haber estudiado individualmente los modelos, es el momento de decantarnos por uno de ellos.
 
@@ -556,7 +588,7 @@ En primer lugar vamos a ver los $E_{in}$ y $E_{test}$ conseguidos por cada uno:
 | Red neuronal de dos capas     |  5.4545  | 9.5406      |
 | Red neuronal de tres capas    |  1.5151  | 8.4805      |
 
-De esta tabla se extrae que la regresión logística es más que suficiente para predecir con alta fiabilidad nuevos datos; de hecho, parece realizar un mejor ajuste que los modelos no lineales. Para confirmar esto, vamos a analizar también las curvas _ROC_ y el área debajo de las mismas.
+De esta tabla se extrae que la regresión logística es más que suficiente para predecir con alta fiabilidad nuevos datos; de hecho, parece realizar un ajuste más consistente que los modelos no lineales. Para confirmar esto, vamos a analizar también las curvas _ROC_ y el área debajo de las mismas. Este último dato puede verse en la siguiente tabla:
 
 | Modelo                    | Area Under Curve |
 |:-------------------------:|:----------------:|
@@ -564,6 +596,113 @@ De esta tabla se extrae que la regresión logística es más que suficiente para
 | Random Forest             |   0.9774930056   | 
 | Boosting                  |   0.9792915667   | 
 | Support Vector Machine    |   0.9732713829   |
-| Red neuronal de una capa  |       |
-| Red neuronal de dos capas |       |
-| Red neuronal de tres capas|       |
+| Red neuronal de una capa  |   0.9581834532   |
+| Red neuronal de dos capas |   0.9460431655   |
+| Red neuronal de tres capas|   0.9407973621   |
+
+
+
+Comprobamos que, una vez más, la regresión logística obtiene el mejor valor. La interpretación es la siguiente: este modelo tiene mayor precisión cuando consideramos todos los posibles umbrales a partir de los cuales decide clasificar positivamente una observación. Hay que destacar que los valores obtenidos por los otros modelos indican también una alta calidad general, pero los dos criterios que hemos usado apuntan en la misma dirección: la regresión logística es el modelo a elegir.
+
+Con el objetivo de ofrecer mayor claridad acerca del significado de los valores de la tabla anterior, a continuación se ve una representación de las curvas _ROC_ de todos los modelos:
+
+\vspace{0.7cm}
+
+```{r, echo=FALSE, fig.align='center'}
+
+calcula_curva_roc = function(pred,truth){
+    predob = prediction(pred,truth)
+    area = performance(predob,"auc")
+    curva = performance(predob,"tpr","fpr")
+    list(curva=curva,area=area)
+}
+
+# Curva ROC regresión logística
+modelo_glm = ajustes_glm_sin_pca[3,glm_sin_pca_min_error_index]
+eval_glm = unlist(evaluar_modelo(modelo_glm,datos_procesados_sin_pca[-indices_train,]))
+roc_glm = calcula_curva_roc(eval_glm,etiquetas[-indices_train])
+
+area_roc_glm = roc_glm$area@y.values
+# Curva ROC Random Forest
+modelo_rf = ajustes_rf_cv[3,rf_cv_min_error_index]
+eval_rf = predict(modelo_rf,datos[-indices_train,],type="prob")$rf[,2]
+roc_rf = calcula_curva_roc(eval_rf,etiquetas[-indices_train])
+
+area_roc_rf = roc_rf$area@y.values
+# Curva ROC AdaBoost
+modelo_ada = ada_fit
+eval_ada = predict(modelo_ada,datos[-indices_train,],type="prob")[,2]
+roc_ada = calcula_curva_roc(eval_ada,etiquetas[-indices_train])
+
+area_roc_ada = roc_ada$area@y.values
+# Curva ROC Support Vector Machines
+modelo_svm = svm_fit
+eval_svm = predict(modelo_svm,datos[-indices_train,],type="prob")[,2]
+roc_svm = calcula_curva_roc(eval_svm,etiquetas[-indices_train])
+
+area_roc_svm = roc_svm$area@y.values
+
+# Curva ROC Redes Neuronales con una capa
+modelo_nn_una = nn_fit_una
+eval_nn_una = compute(modelo_nn_una$finalModel,datos[-indices_train,])
+roc_nn_una = calcula_curva_roc(eval_nn_una$net.result,etiquetas[-indices_train])
+
+area_roc_nn_una = roc_nn_una$area@y.values
+
+# Curva ROC Redes Neuronales con dos capas
+modelo_nn_dos= nn_fit_dos
+eval_nn_dos = compute(modelo_nn_dos$finalModel,datos[-indices_train,])
+roc_nn_dos = calcula_curva_roc(eval_nn_dos$net.result,etiquetas[-indices_train])
+
+area_roc_nn_dos = roc_nn_dos$area@y.values
+
+# Curva ROC Redes Neuronales con tres capas
+modelo_nn_tres= nn_fit_tres
+eval_nn_tres = compute(modelo_nn_tres$finalModel,datos[-indices_train,])
+roc_nn_tres = calcula_curva_roc(eval_nn_tres$net.result,etiquetas[-indices_train])
+
+area_roc_nn_tres = roc_nn_tres$area@y.values
+
+layout(matrix(c(1,2,3,4), 2, 2, byrow = TRUE))
+par(mai=c(0.7,0.4,0.4,0.4),pty="s")
+plot(roc_glm$curva, main = "R. Log", col = "blue")
+plot(roc_rf$curva, main = "Random Forest", col = "blue")
+plot(roc_ada$curva, main = "AdaBoost", col = "blue")
+plot(roc_svm$curva, main = "SVM", col = "blue")
+```
+\vspace{0.7cm}
+```{r, echo=FALSE,fig.align='center'}
+#layout(matrix(c(1,2,3), 2, 3, byrow = TRUE))
+par(mai=c(0.53,0.5,0.4,0.4),mfrow=c(2,3),pty="s")
+plot(roc_nn_una$curva, main = "NN 1 layer", col = "blue")
+plot(roc_nn_dos$curva, main = "NN 2 layers", col = "blue")
+plot(roc_nn_tres$curva, main = "NN 3 layers", col = "blue")
+```
+
+
+## Descripción del modelo elegido
+
+El modelo final será, como hemos mencionado anteriormente, la regresión logística. A continuación, vamos a presentar las características que han intervenido en el ajuste final junto con sus pesos y los valores utilizados en los distintos métodos de preprocesamiento:
+    
+| Var.  |   Peso  | Centrado | Escalado | Yeo-Jonhson | Var.     | Peso      | Centrado | Escalado| Yeo-Jonhson |
+|:-----:|:-------:|:--------:|:--------:|:------------------:|:--------:|:---------:|---------:|:-------:|:------------------:|
+| FSW.1 |  3.5753 | 6.9361   | 1.4599   | 0.3273             | SSP.2    |  -5.1918  | 162.4274 | 49.1844 | 1.4974             |
+| SSW.1 |  1.4204 | 4.3006   | 1.1066   | 0.2869             | SSW.2    |  -1.0284  | 4.6731   | 1.3173  | 0.3366             |
+| BPC.1 |  1.8938 | 2.2502   | 1.1279   | 0.3069             | BPC.2    |  -1.7250  | 2.2651   | 1.1205  | 0.3316             |
+| BPW.1 |  0.9310 | 3.0814   | 1.5783   | 0.4139             | BPW.2    |  -0.8471  | 3.0681   | 1.5396  | 0.4159             |
+| TPW.1 | 15.7692 | 7.9018   | 5.7159   | 0.3695             | NPW.2    |   0.2786  | 4.6566   | 2.4294  | 0.3841             |
+| FSP.2 | -4.882 | 5.3850   | 0.2134   | 0.1221             | TPW.2    | -15.854  | 8.0051   | 5.7826  | 0.3730             |
+| FSW.2 | -4.401 | 6.1526   | 1.1877   | 0.2717             | Intercept|   0.02848 |          |         |                    |
+
+Para obtener un estimador del error fuera de la muestra vamos a emplear el error de test y la desigualdad de _Hoeffding_:
+    
+$$\mathbb{P}[|E_{test}(g) - E_{out}(g)| > \epsilon] \leq 2e^{-2N\epsilon^2}$$
+    
+Donde $N$ es el número de observaciones de la partición de test y $\mathbb{P}[|E_{test}(g) - E_{out}(g)| > \epsilon]$ corresponde a una tolerancia $\delta$ que fijaremos a 0.05.
+
+$$\delta \leq 2e^{-2N\epsilon^2}$$
+    
+Junto con el error en la partición de test obtendremos, despejando $\epsilon$ de la siguiente forma, un intervalo en el que se encuentra $E_{out}$ con una tolerancia $\delta =$ 0.05.
+
+$$ \sqrt{\frac{log(2)-log(\delta)}{2N}} \geq \epsilon$$
+    
