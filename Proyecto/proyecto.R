@@ -1,5 +1,22 @@
 set.seed(3)
 
+#######################################################
+## Advertencia:                                      ##
+## Comentar las líneas correspondientes a las redes  ##
+## neuronales antes de hacer "source", tardan más de ##
+## 8 horas en ejecutar completamente. (inicio l.290) ##
+#######################################################
+
+# Es necesario cambiar el path dependiendo de la versión
+library("caret", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.4")
+library("e1071", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.4")
+library("leaps", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.4")
+library("kernlab", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.4")
+library("randomForest", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.4")
+library("ada", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.4")
+library("ROCR", lib.loc="~/R/x86_64-pc-linux-gnu-library/3.4")
+
+
 leer_datos_partidos = function(){
 
     datos = read.csv("./datos/partidos.csv", header = TRUE)
@@ -163,7 +180,7 @@ error_glm = ajustes_glm_sin_pca[2,glm_sin_pca_min_error_index]
 pred_glm_in = predict(ajustes_glm_sin_pca[3,glm_sin_pca_min_error_index], datos_procesados_sin_pca[indices_train, -ncol(datos_procesados_sin_pca)])
 error_glm_in = porcentaje_error(categorizar(unlist(pred_glm_in)), etiquetas[indices_train])
 
-print(c("Error test regresión logística sin PCA: ", error_glm))
+print(c("Error test regresión logística sin PCA: ", error_glm$error))
 print(c("Error train regresión logística sin PCA: ", error_glm_in))
 scan()
 
@@ -174,7 +191,7 @@ control = trainControl(method = "cv", number = 10)
 
 #######################################
 # Random Forest
-
+print("Ejecutando Validación cruzada para Random Forest")
 set.seed(111)
 num_arboles = seq(50,500,5)
 
@@ -184,6 +201,7 @@ rf_cv_min_error_index = which.min(unlist(ajustes_rf_cv[2,]))
 
 plot(x=num_arboles,y=ajustes_rf_cv[2,],pch=20,ylim=c(4,19),type="o",col="blue",xlab="Número de árboles",ylab="% Error de validación cruzada", main = "Comparativa de número de árboles")
 points(x=ajustes_rf_cv[1,rf_cv_min_error_index], y=ajustes_rf_cv[2,rf_cv_min_error_index], pch=19, col="orange")
+scan()
 
 rf_pred_test = evaluar_modelo(ajustes_rf_cv[3,rf_cv_min_error_index]$rf,datos[-indices_train,])
 error_rf = porcentaje_error(as.numeric(rf_pred_test),etiquetas[-indices_train])
@@ -208,7 +226,7 @@ scan()
 
 #######################################
 # Adaboost
-
+print("Ejecutando Validación Cruzada para AdaBoost")
 set.seed(111)
 grid = expand.grid(maxdepth=1, iter=seq(20, 100, 10), nu=c(0.15,0.2,0.25,0.3))
 rcontrol = rpart.control(maxdepth=1,cp=-1,minsplit=0)
@@ -239,6 +257,7 @@ scan()
 
 #######################################
 # Support Vector Machines
+print("Ejecutando Validación Cruzada para Support Vector Machine")
 set.seed(111)
 grid = expand.grid(C=seq(1,5,1), sigma=seq(0.02, 0.04, 0.005))
 svm_fit = train(x = datos[indices_train,], y = as.factor(etiquetas[indices_train]),method = "svmRadial", trControl = control, prob.model = TRUE, preProcess = c("YeoJohnson","center","scale"), tuneGrid = grid)
@@ -270,7 +289,7 @@ scan()
 
 #######################################
 # Neural Networks
-
+print("Ejecutando Validación Cruzada para Redes Neuronales")
 ptm <- proc.time()
 set.seed(17)
 control = trainControl(method = "cv", number = 5)
@@ -278,7 +297,7 @@ grid = expand.grid(layer1=c(seq(1,50,3),50), layer2=0, layer3=0)
 nn_fit_una = train(x = datos[indices_train,], y = etiquetas[indices_train],method = "neuralnet", linear.output=FALSE, trControl = control, tuneGrid = grid)
 grid = expand.grid(layer1=c(seq(3,50,5),50), layer2=seq(3,50,5), layer3=0)
 nn_fit_dos = train(x = datos[indices_train,], y = etiquetas[indices_train],method = "neuralnet", linear.output=FALSE, trControl = control, tuneGrid = grid)
-grid = expand.grid(layer1=c(seq(1,50,10),50), layer2=seq(0,50,10), layer3=seq(0,50,10))
+grid = expand.grid(layer1=c(seq(1,50,10),50), layer2=seq(1,50,10), layer3=seq(1,50,10))
 nn_fit_tres = train(x = datos[indices_train,], y = etiquetas[indices_train],method = "neuralnet", linear.output=FALSE, trControl = control, tuneGrid = grid)
 end_time = proc.time() - ptm
 
